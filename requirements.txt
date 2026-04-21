@@ -1,5 +1,5 @@
 # Core LLM / TTS
-# Uses Claude Code OAuth (subscription) — no Anthropic API key needed for Phase 1~3.
+# Uses Claude Code OAuth (subscription); ANTHROPIC_API_KEY is optional (only for cron).
 claude-agent-sdk>=0.1.0
 google-genai>=1.70.0
 

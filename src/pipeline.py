@@ -14,7 +14,7 @@ import typer
 from src.config import AUDIO_DIR, PAPERS_DIR, SCRIPTS_DIR, VIDEOS_DIR
 from src.ingest import arxiv_fetcher, pdf_parser
 from src.script import generator as script_gen
-from src.tts.gemini import GeminiTTS
+from src import tts
 from src.video import audio_merger
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -46,13 +46,12 @@ def run(
         paper_id=slug,
     )
 
-    log.info("4/4 Gemini TTS 합성 (%d 라인)", len(script["script"]))
-    tts = GeminiTTS()
+    log.info("4/4 TTS 합성 (%d 라인)", len(script["script"]))
     line_dir = AUDIO_DIR / slug / "lines"
     line_files: list[tuple[Path, int]] = []
     for i, line in enumerate(script["script"]):
         out = line_dir / f"{i:03d}_{line['speaker']}.wav"
-        tts.synthesize(line["text"], line["speaker"], out)
+        tts.synthesize(line["text"], line["speaker"], out, emotion=line.get("emotion", "neutral"))
         line_files.append((out, int(line.get("pause_after_ms", 0))))
 
     merged_mp3 = AUDIO_DIR / slug / f"{slug}.mp3"

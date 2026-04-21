@@ -240,10 +240,8 @@ VOICE_CONFIG = {
 
 ## 첫 번째 테스트 논문
 
-**HapticGen: Generative Text-to-Vibration Model for Streamlining Haptic Design**
-- 저자: Youjin Sung, Kevin John, Sang Ho Yoon, Hasti Seifi
-- 발표: CHI 2025
-- 프로젝트 사이트: https://hapticgen.hcitech.org/
-- GitHub: https://github.com/HapticGen/HapticGen
+**목표 논문**: HapticGen (Sung et al., CHI 2025) — 프로젝트 자체 목적에 맞는 첫 타겟.
+- ACM DL 전용(arXiv 없음)이라 ID 기반 `fetch_by_id` 불가. PDF 수동 다운 필요.
+- https://hapticgen.hcitech.org/ 또는 ACM DL (DOI: 10.1145/3706598.3713609) 에서 받아 `data/papers/hapticgen-chi2025.pdf` 로 저장 후 파이프라인 호출.
 
-이 논문으로 End-to-End 파이프라인을 먼저 검증한 후 자동화로 확장.
+**임시 스모크 테스트**: `scripts/run_example.py` 는 arXiv 에서 바로 받을 수 있는 *Attention Is All You Need* (1706.03762) 로 End-to-End 검증.

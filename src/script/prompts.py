@@ -25,6 +25,11 @@ intro → background → method → results → backstory → limitations → ra
 [출력 형식]
 오직 JSON 한 덩어리만 출력. 앞뒤 설명·마크다운 코드블록 금지.
 스키마는 사용자 메시지에 명시됨.
+
+[절대 규칙]
+script 배열의 **모든 원소**는 반드시 아래 5개 필드 전부 포함:
+  section, speaker, text, emotion, pause_after_ms
+하나라도 빠지면 파싱 실패. 특히 speaker 누락 주의.
 """
 
 
