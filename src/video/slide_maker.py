@@ -1,14 +1,16 @@
-"""Render paper pages as slide images (PNG)."""
+"""Render paper pages as slide images (PNG). Uses the project-local poppler."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from pdf2image import convert_from_path
 
+from src.config import POPPLER_BIN
+
 
 def render_pages(pdf_path: Path, out_dir: Path, dpi: int = 150) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    images = convert_from_path(str(pdf_path), dpi=dpi)
+    images = convert_from_path(str(pdf_path), dpi=dpi, poppler_path=str(POPPLER_BIN))
     paths: list[Path] = []
     for i, img in enumerate(images, start=1):
         p = out_dir / f"page_{i:03d}.png"

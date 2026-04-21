@@ -43,21 +43,25 @@ CLOVA_TTS_URL = "https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts"
 VOICE_CONFIG: dict[str, dict] = {
     "민재": {
         "provider": "clova",
-        "speaker": "njihwan",   # 청년 남성, 활기찬
-        "speed": -1,            # -5(빠름) ~ 5(느림). 쇼츠 느낌은 약간 빠르게.
-        "pitch": 0,
+        "speaker": "vian",     # CLOVA V 시리즈, 모던 청년 남성
+        "fallback_speaker": "njihwan",  # VS26 발생 시 이 화자로 재시도
+        "speed": -1,           # -5(빠름) ~ 5(느림).
+        "pitch": 1,            # -5(낮음) ~ 5(높음).
         "volume": 0,
-        "emotion_default": 0,   # 0 neutral, 1 sad, 2 happy, 3 angry
-        "emotion_strength": 2,  # 0 weak, 1 normal, 2 strong
+        "supports_emotion": True,  # 미지원 시 자동 재시도 로직 있음
+        "emotion_default": 0,
+        "emotion_strength": 1,
     },
     "수빈": {
         "provider": "clova",
-        "speaker": "ndain",     # 성인 여성, 발랄 (쇼츠 클래식 보이스)
+        "speaker": "vhyeri",   # CLOVA V 시리즈, 발랄 여성 — 쇼츠 느낌
+        "fallback_speaker": "ngaram",   # VS26 발생 시 이 화자로 재시도
         "speed": -1,
-        "pitch": 0,
+        "pitch": 1,
         "volume": 0,
+        "supports_emotion": True,
         "emotion_default": 0,
-        "emotion_strength": 2,
+        "emotion_strength": 1,
     },
 }
 
@@ -82,3 +86,12 @@ LONGFORM_RESOLUTION = (1920, 1080)
 SHORTS_RESOLUTION = (1080, 1920)
 FPS = 30
 AUDIO_BITRATE = "192k"
+
+# --- Third-party binaries (project-local) ---
+POPPLER_BIN = PROJECT_ROOT / "tools" / "poppler-24.08.0" / "Library" / "bin"
+
+# --- Phase 4: YouTube upload ---
+YOUTUBE_OAUTH_CLIENT_FILE = PROJECT_ROOT / "credentials" / "youtube_oauth_client.json"
+YOUTUBE_TOKEN_FILE = PROJECT_ROOT / "credentials" / "youtube_token.json"
+YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+YOUTUBE_CATEGORY_ID = "28"  # Science & Technology
