@@ -1,0 +1,51 @@
+# Secrets
+.env
+.env.local
+*.key
+credentials.json
+token.json
+client_secret*.json
+
+# Claude Code personal settings (team settings stay in .claude/settings.json)
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Data artifacts (large / regenerable)
+data/papers/*
+data/scripts/*
+data/audio/*
+data/videos/*
+!data/**/.gitkeep
+
+# Media output
+*.mp3
+*.mp4
+*.wav
+*.m4a
+*.webm
+*.srt
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
