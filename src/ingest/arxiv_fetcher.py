@@ -15,10 +15,14 @@ from src.config import PAPERS_DIR
 _PDF_URL = "https://arxiv.org/pdf/{id}"
 
 
-def fetch_by_id(arxiv_id: str, dest_dir: Path = PAPERS_DIR) -> Path:
-    """Download a single paper PDF by arXiv id. Returns the PDF path."""
+def fetch_by_id(arxiv_id: str, dest_dir: Path = PAPERS_DIR, slug: str | None = None) -> Path:
+    """Download a single paper PDF by arXiv id. Returns the PDF path.
+
+    If `slug` is provided, saves as `<slug>.pdf` so downstream code that looks
+    up the PDF by slug works correctly even when multiple papers coexist.
+    """
     dest_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"{arxiv_id.replace('/', '_')}.pdf"
+    filename = f"{slug}.pdf" if slug else f"{arxiv_id.replace('/', '_')}.pdf"
     dest = dest_dir / filename
     if not dest.exists():
         url = _PDF_URL.format(id=arxiv_id)

@@ -43,25 +43,25 @@ CLOVA_TTS_URL = "https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts"
 VOICE_CONFIG: dict[str, dict] = {
     "민재": {
         "provider": "clova",
-        "speaker": "vian",     # CLOVA V 시리즈, 모던 청년 남성
-        "fallback_speaker": "njihwan",  # VS26 발생 시 이 화자로 재시도
-        "speed": -1,           # -5(빠름) ~ 5(느림).
-        "pitch": 1,            # -5(낮음) ~ 5(높음).
-        "volume": 0,
-        "supports_emotion": True,  # 미지원 시 자동 재시도 로직 있음
-        "emotion_default": 0,
-        "emotion_strength": 1,
-    },
-    "수빈": {
-        "provider": "clova",
-        "speaker": "vhyeri",   # CLOVA V 시리즈, 발랄 여성 — 쇼츠 느낌
-        "fallback_speaker": "ngaram",   # VS26 발생 시 이 화자로 재시도
+        "speaker": "njihwan",  # 안정적, 에피소드 전체 일관된 톤 유지
         "speed": -1,
         "pitch": 1,
         "volume": 0,
         "supports_emotion": True,
         "emotion_default": 0,
         "emotion_strength": 1,
+        "subtitle_color": "&H00E8993D",  # ASS 색상 (BGR): 파란 계열
+    },
+    "수빈": {
+        "provider": "clova",
+        "speaker": "ngaram",   # 발랄한 어린 여성, 쇼츠 친화적
+        "speed": -1,
+        "pitch": 1,
+        "volume": 0,
+        "supports_emotion": True,
+        "emotion_default": 0,
+        "emotion_strength": 1,
+        "subtitle_color": "&H00B569FF",  # 핑크 계열
     },
 }
 

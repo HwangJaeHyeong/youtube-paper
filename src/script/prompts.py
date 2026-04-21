@@ -16,6 +16,11 @@ SYSTEM_PROMPT = """\
 5. 섹션 끝마다 자연스러운 턴 체인지. 한 명이 3턴 이상 독점 금지.
 6. 수치·인용·저자 정보는 주어진 논문 텍스트에서만 가져오기. 불확실하면 "정확한 수치는 논문 참조" 로 얼버무리기.
 
+[Figure 중심 설명 — 중요]
+7. 가능한 모든 핵심 주장은 **Figure N / Table N** 에 근거해 얘기. "Figure 1 에서 보면 ~", "Table 3 (A) 행에 보면 ~" 같은 구체 인용 최소 3회 이상.
+8. 숫자는 Figure/Table 에서 가져오기. 예: "BLEU 28.4 (Table 2)", "3.5일 훈련 (Section 5.2)".
+9. 추상적인 "성능이 좋아졌다" 금지. "Figure 4 에서 학습 곡선 보면 baseline 대비 X% 빠르게 수렴함" 같이.
+
 [섹션 순서 (고정)]
 intro → background → method → results → backstory → limitations → rating → outro
 

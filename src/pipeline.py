@@ -20,7 +20,7 @@ from src.config import AUDIO_DIR, PAPERS_DIR, SCRIPTS_DIR, VIDEOS_DIR
 from src.ingest import arxiv_fetcher, pdf_parser
 from src.script import generator as script_gen
 from src.script import shorts_generator
-from src.video import audio_merger, composer, slide_maker, subtitle
+from src.video import audio_merger, composer, figure_cropper, figure_indexer, slide_maker, subtitle, title_card
 from src.upload import youtube as yt_upload
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -52,8 +52,8 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
     wavs = sorted(line_dir.glob("*.wav"))
     assert len(wavs) == len(data["script"]), f"wav count {len(wavs)} != lines {len(data['script'])}"
 
-    srt = AUDIO_DIR / slug / f"{slug}.srt"
-    subtitle.build_srt(data["script"], wavs, srt)
+    ass = AUDIO_DIR / slug / f"{slug}.ass"
+    subtitle.build_ass(data["script"], wavs, ass)
 
     paper_id = data.get("paper_id", slug).replace("-shorts", "")
     pdf_candidates = list(PAPERS_DIR.glob(f"*{paper_id.split('-')[0]}*.pdf")) or list(PAPERS_DIR.glob("*.pdf"))
@@ -63,13 +63,39 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
 
     pages_dir = AUDIO_DIR / slug / "pages"
     pages = slide_maker.render_pages(pdf, pages_dir, dpi=150) if not list(pages_dir.glob("*.png")) else sorted(pages_dir.glob("*.png"))
-    bg = pages[0]
+
+    fig_index = figure_indexer.build_index(pdf)
+    log.info("figure index: %s", fig_index)
+
+    # Render cropped Figure/Table images for any visual_ref that shows up in the script.
+    crops_dir = AUDIO_DIR / slug / "crops"
+    crops_dir.mkdir(parents=True, exist_ok=True)
+    crops: dict[str, Path] = {}  # normalized ref -> crop PNG
+    for line in data["script"]:
+        ref = figure_cropper.normalize_ref(line.get("visual_ref"))
+        if not ref or ref in crops:
+            continue
+        page_idx = fig_index.get(ref)
+        if not page_idx:
+            continue
+        out_png = crops_dir / f"{ref.replace(' ', '_')}.png"
+        if not out_png.exists():
+            figure_cropper.crop_visual(pdf, page_idx, ref, out_png)
+        crops[ref] = out_png
+    log.info("crops rendered: %d (%s)", len(crops), list(crops.keys()))
+
+    cover = AUDIO_DIR / slug / "cover.png"
+    title_card.render_cover(cover)
+    segments = composer.build_segments_v2(
+        data["script"], wavs, pages, fig_index, crops, fallback_img=cover
+    )
+    log.info("video segments: %d (fallback=%s)", len(segments), cover.name)
 
     out_mp4 = VIDEOS_DIR / f"{slug}.mp4"
     if is_shorts:
-        composer.compose_shorts(mp3, srt, bg, out_mp4)
+        composer.compose_shorts(mp3, ass, pages, segments, out_mp4)
     else:
-        composer.compose_longform(mp3, srt, bg, out_mp4)
+        composer.compose_longform(mp3, ass, pages, segments, out_mp4)
     return out_mp4
 
 
@@ -103,11 +129,13 @@ def run(
 
 @app.command()
 def video(slug: str) -> None:
-    """롱폼 mp4 만들기 (스크립트 JSON + mp3 이미 있어야 함)."""
+    """롱폼/쇼츠 mp4 만들기. 형식은 스크립트의 metadata.target_length 로 자동 판별."""
     script_json = SCRIPTS_DIR / f"{slug}.json"
     mp3 = AUDIO_DIR / slug / f"{slug}.mp3"
-    out = _generate_video(slug, script_json, mp3, is_shorts=False)
-    typer.echo(json.dumps({"mp4": str(out)}))
+    data = json.loads(script_json.read_text(encoding="utf-8"))
+    is_shorts = data.get("metadata", {}).get("target_length") == "shorts" or slug.endswith("-shorts")
+    out = _generate_video(slug, script_json, mp3, is_shorts=is_shorts)
+    typer.echo(json.dumps({"mp4": str(out), "orientation": "shorts" if is_shorts else "longform"}))
 
 
 @app.command()
@@ -121,6 +149,38 @@ def shorts(slug: str) -> None:
     mp3, _, _ = _run_tts_and_merge(shorts_data, shorts_slug)
 
     log.info("쇼츠 영상 조립")
+    script_json = SCRIPTS_DIR / f"{shorts_slug}.json"
+    out = _generate_video(shorts_slug, script_json, mp3, is_shorts=True)
+    typer.echo(json.dumps({"shorts_slug": shorts_slug, "mp4": str(out)}))
+
+
+@app.command("shorts-only")
+def shorts_only(
+    arxiv_id: str = typer.Argument(...),
+    paper_slug: str = typer.Option(None),
+    venue: str = typer.Option("arXiv"),
+) -> None:
+    """롱폼 없이 arxiv_id 에서 바로 쇼츠 생성 (스크립트 + TTS + mp4)."""
+    base_slug = paper_slug or arxiv_id.replace("/", "_")
+    log.info("1/4 arXiv 다운: %s", arxiv_id)
+    pdf = arxiv_fetcher.fetch_by_id(arxiv_id, dest_dir=PAPERS_DIR, slug=base_slug)
+    paper = pdf_parser.parse(pdf)
+
+    log.info("2/4 쇼츠 스크립트 (self-critique 5회 반복)")
+    shorts_data = shorts_generator.generate_from_paper_iterative(
+        paper_title=paper.title or arxiv_id,
+        authors=paper.authors,
+        venue=venue,
+        paper_text=paper.text,
+        slug=base_slug,
+        rounds=5,
+    )
+    shorts_slug = f"{base_slug}-shorts"
+
+    log.info("3/4 쇼츠 TTS %d lines", len(shorts_data["script"]))
+    mp3, _, _ = _run_tts_and_merge(shorts_data, shorts_slug)
+
+    log.info("4/4 쇼츠 영상 조립")
     script_json = SCRIPTS_DIR / f"{shorts_slug}.json"
     out = _generate_video(shorts_slug, script_json, mp3, is_shorts=True)
     typer.echo(json.dumps({"shorts_slug": shorts_slug, "mp4": str(out)}))

@@ -16,6 +16,7 @@ class Line(BaseModel):
     text: str
     emotion: Emotion = "neutral"
     pause_after_ms: int = Field(default=200, ge=0, le=5000)
+    visual_ref: str | None = None  # e.g. "Figure 1", "Table 2", or null
 
 
 class Rating(BaseModel):
