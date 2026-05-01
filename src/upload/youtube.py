@@ -22,10 +22,17 @@ from src.config import (
 )
 
 
-def _load_credentials() -> Credentials:
+def _token_path(channel: str | None) -> Path:
+    if not channel:
+        return YOUTUBE_TOKEN_FILE
+    return YOUTUBE_TOKEN_FILE.parent / f"youtube_token_{channel}.json"
+
+
+def _load_credentials(channel: str | None = None) -> Credentials:
+    token_file = _token_path(channel)
     creds: Credentials | None = None
-    if YOUTUBE_TOKEN_FILE.exists():
-        creds = Credentials.from_authorized_user_file(str(YOUTUBE_TOKEN_FILE), YOUTUBE_SCOPES)
+    if token_file.exists():
+        creds = Credentials.from_authorized_user_file(str(token_file), YOUTUBE_SCOPES)
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
     if not creds or not creds.valid:
@@ -38,8 +45,8 @@ def _load_credentials() -> Credentials:
             str(YOUTUBE_OAUTH_CLIENT_FILE), YOUTUBE_SCOPES
         )
         creds = flow.run_local_server(port=0)
-        YOUTUBE_TOKEN_FILE.parent.mkdir(parents=True, exist_ok=True)
-        YOUTUBE_TOKEN_FILE.write_text(creds.to_json(), encoding="utf-8")
+        token_file.parent.mkdir(parents=True, exist_ok=True)
+        token_file.write_text(creds.to_json(), encoding="utf-8")
     return creds
 
 
@@ -50,9 +57,11 @@ def upload(
     tags: list[str] | None = None,
     privacy_status: str = "private",
     is_shorts: bool = False,
+    channel: str | None = None,
+    publish_at: str | None = None,
 ) -> str:
     """Upload `video_path` to the authenticated channel. Returns video id."""
-    creds = _load_credentials()
+    creds = _load_credentials(channel)
     youtube = build("youtube", "v3", credentials=creds)
 
     final_title = title
@@ -61,17 +70,21 @@ def upload(
     if is_shorts:
         description = f"{description}\n\n#Shorts"
 
+    status = {
+        "privacyStatus": privacy_status,
+        "selfDeclaredMadeForKids": False,
+    }
+    if publish_at:
+        status["privacyStatus"] = "private"
+        status["publishAt"] = publish_at  # RFC3339, e.g. 2026-04-22T19:00:00+09:00
     body = {
         "snippet": {
-            "title": final_title[:100],  # YouTube 100자 제한
+            "title": final_title[:100],
             "description": description[:5000],
             "tags": (tags or [])[:30],
             "categoryId": YOUTUBE_CATEGORY_ID,
         },
-        "status": {
-            "privacyStatus": privacy_status,  # "private" | "unlisted" | "public"
-            "selfDeclaredMadeForKids": False,
-        },
+        "status": status,
     }
     media = MediaFileUpload(str(video_path), chunksize=8 * 1024 * 1024, resumable=True, mimetype="video/mp4")
     req = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
@@ -82,4 +95,23 @@ def upload(
             print(f"  uploaded {int(status.progress() * 100)}%", flush=True)
     video_id = response["id"]
     print(f"  done: https://www.youtube.com/watch?v={video_id}", flush=True)
+
+    # Extract first frame as custom thumbnail.
+    try:
+        import subprocess, tempfile
+        from pathlib import Path as _Path
+        thumb = _Path(tempfile.gettempdir()) / f"thumb_{video_id}.jpg"
+        subprocess.run(
+            ["ffmpeg", "-y", "-ss", "1.0", "-i", str(video_path),
+             "-frames:v", "1", "-q:v", "2", str(thumb)],
+            check=True, capture_output=True,
+        )
+        youtube.thumbnails().set(
+            videoId=video_id,
+            media_body=MediaFileUpload(str(thumb), mimetype="image/jpeg"),
+        ).execute()
+        print(f"  thumbnail set", flush=True)
+    except Exception as e:
+        print(f"  thumbnail skipped: {e}", flush=True)
+
     return video_id

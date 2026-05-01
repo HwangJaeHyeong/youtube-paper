@@ -15,8 +15,9 @@ from pypdf import PdfReader
 # showing the figure. Body-text references like "as in Figure 1" can occur on
 # any page and would mislead the mapping.
 _CAPTION_PATTERNS = [
-    re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*[:.]"),
-    re.compile(r"(?i)\b(table)\s*(\d+)\s*[:.]"),
+    # Standard ("Figure 1:" / "Fig. 1.") + Nature-style ("Fig. 1 |").
+    re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*[:.|]"),
+    re.compile(r"(?i)\b(table)\s*(\d+)\s*[:.|]"),
 ]
 
 

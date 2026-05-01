@@ -30,7 +30,7 @@ for _d in (PAPERS_DIR, SCRIPTS_DIR, AUDIO_DIR, VIDEOS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # --- LLM models ---
-CLAUDE_MODEL = "claude-opus-4-7"
+CLAUDE_MODEL = "claude-sonnet-4-6"
 
 # --- TTS: Gemini 2.5 (Google AI Studio) ---
 # https://ai.google.dev/gemini-api/docs/speech-generation
@@ -43,25 +43,35 @@ CLOVA_TTS_URL = "https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts"
 VOICE_CONFIG: dict[str, dict] = {
     "민재": {
         "provider": "clova",
-        "speaker": "njihwan",  # 안정적, 에피소드 전체 일관된 톤 유지
-        "speed": -1,
-        "pitch": 1,
+        "speaker": "nwoosik",
+        "speed": -3,
+        "pitch": 0,
         "volume": 0,
-        "supports_emotion": True,
-        "emotion_default": 0,
-        "emotion_strength": 1,
-        "subtitle_color": "&H00E8993D",  # ASS 색상 (BGR): 파란 계열
+        "supports_emotion": False,
+        "subtitle_color": "&H00E8993D",
     },
     "수빈": {
         "provider": "clova",
-        "speaker": "ngaram",   # 발랄한 어린 여성, 쇼츠 친화적
-        "speed": -1,
-        "pitch": 1,
+        "speaker": "vdain",
+        "speed": -3,
+        "pitch": -2,
         "volume": 0,
-        "supports_emotion": True,
-        "emotion_default": 0,
-        "emotion_strength": 1,
-        "subtitle_color": "&H00B569FF",  # 핑크 계열
+        "supports_emotion": False,
+        "subtitle_color": "&H00B569FF",
+    },
+    "Alex": {
+        "provider": "edge",
+        "voice_name": "en-US-GuyNeural",
+        "rate": "+10%",
+        "pitch": "+0Hz",
+        "subtitle_color": "&H00E8993D",
+    },
+    "Sam": {
+        "provider": "edge",
+        "voice_name": "en-US-JennyNeural",
+        "rate": "+12%",
+        "pitch": "+20Hz",
+        "subtitle_color": "&H00B569FF",
     },
 }
 
@@ -93,5 +103,9 @@ POPPLER_BIN = PROJECT_ROOT / "tools" / "poppler-24.08.0" / "Library" / "bin"
 # --- Phase 4: YouTube upload ---
 YOUTUBE_OAUTH_CLIENT_FILE = PROJECT_ROOT / "credentials" / "youtube_oauth_client.json"
 YOUTUBE_TOKEN_FILE = PROJECT_ROOT / "credentials" / "youtube_token.json"
-YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+YOUTUBE_SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+    "https://www.googleapis.com/auth/youtube",
+]
 YOUTUBE_CATEGORY_ID = "28"  # Science & Technology

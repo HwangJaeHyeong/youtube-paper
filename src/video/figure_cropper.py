@@ -19,7 +19,15 @@ import fitz  # pymupdf
 
 
 def _find_caption_rect(page: fitz.Page, ref: str) -> fitz.Rect | None:
-    for variant in (f"{ref}:", f"{ref}.", ref):
+    # ref looks like "Figure 1" or "Table 2".
+    # Try standard punctuation, Nature pipe format, and short "Fig. N" variant.
+    short = ref.replace("Figure", "Fig.")
+    variants = [
+        f"{ref}:", f"{ref}.", f"{ref} |",
+        f"{short}:", f"{short}.", f"{short} |",
+        ref, short,
+    ]
+    for variant in variants:
         rects = page.search_for(variant)
         if rects:
             return rects[0]
@@ -116,6 +124,10 @@ def normalize_ref(ref: str | None) -> str | None:
     """
     if not ref:
         return None
+    if ref == "__TITLE__":
+        return "__TITLE__"
+    if ref.startswith("scene_"):
+        return ref
     m = _REF_RE.search(ref)
     if not m:
         return None

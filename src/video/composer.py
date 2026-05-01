@@ -76,6 +76,7 @@ def _compose(
     out_mp4: Path,
     width: int,
     height: int,
+    header_png: Path | None = None,
 ) -> Path:
     """filter_complex-based concat: one input per segment, scaled+padded, concatenated.
 
@@ -91,24 +92,42 @@ def _compose(
             "-i", str(img),
         ]
 
+    # 88% inner area gives a comfortable margin around figures.
+    # Title card (__TITLE__.png) gets full frame so the headline reads at edge-to-edge.
+    inner_w = int(width * 0.88)
+    inner_h = int(height * 0.88)
     parts: list[str] = []
-    for i in range(len(segments)):
-        # CONTAIN mode: fit the whole image inside the target, pad with the
-        # cover color so the padding blends with non-figure segments.
+    for i, (img, _dur) in enumerate(segments):
+        is_title = img.name == "__TITLE__.png"
+        sw, sh = (width, height) if is_title else (inner_w, inner_h)
         parts.append(
-            f"[{i}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            f"[{i}:v]scale={sw}:{sh}:force_original_aspect_ratio=decrease,"
             f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x14161e,"
             f"setsar=1,fps={FPS},format=yuv420p[v{i}]"
         )
     concat_refs = "".join(f"[v{i}]" for i in range(len(segments)))
     parts.append(f"{concat_refs}concat=n={len(segments)}:v=1:a=0[vc]")
-    parts.append(f"[vc]subtitles='{_escape_filter_path(ass_file)}'[vout]")
+
+    # Optional header overlay: appears after the first (title) segment ends.
+    extra_inputs: list[str] = []
+    if header_png and header_png.exists():
+        title_dur = segments[0][1] if segments else 0.0
+        header_idx = len(segments) + 1  # +1 because audio is len(segments) input
+        extra_inputs = ["-i", str(header_png)]
+        parts.append(
+            f"[vc][{header_idx}:v]overlay=x=(W-w)/2:y=140:enable='gte(t,{title_dur:.3f})'[vh]"
+        )
+        parts.append(f"[vh]subtitles='{_escape_filter_path(ass_file)}'[vout]")
+    else:
+        parts.append(f"[vc]subtitles='{_escape_filter_path(ass_file)}'[vout]")
+
     filter_graph = ";".join(parts)
 
     cmd = [
         "ffmpeg", "-y",
         *inputs,
         "-i", str(audio_mp3),
+        *extra_inputs,
         "-filter_complex", filter_graph,
         "-map", "[vout]",
         "-map", f"{len(segments)}:a",
@@ -127,9 +146,10 @@ def compose_shorts(
     pages: list[Path],
     segments: list[tuple[Path, float]],
     out_mp4: Path,
+    header_png: Path | None = None,
 ) -> Path:
     w, h = SHORTS_RESOLUTION
-    return _compose(audio_mp3, ass_file, segments, out_mp4, w, h)
+    return _compose(audio_mp3, ass_file, segments, out_mp4, w, h, header_png=header_png)
 
 
 def compose_longform(

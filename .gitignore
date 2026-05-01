@@ -26,12 +26,22 @@ env/
 dist/
 build/
 
-# Data artifacts (large / regenerable)
+# Data artifacts (large / regenerable) — everything under data/ is ignored
+# except .gitkeep markers that preserve the directory structure on fresh clones.
+data/*
+!data/papers/
+!data/scripts/
+!data/audio/
+!data/videos/
 data/papers/*
 data/scripts/*
 data/audio/*
 data/videos/*
 !data/**/.gitkeep
+
+# Local experiment / debug artifacts that sometimes land at data/ root
+data/check_*.png
+data/run_logs/
 
 # Media output
 *.mp3

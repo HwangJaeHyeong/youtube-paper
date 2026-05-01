@@ -44,6 +44,21 @@ def build_srt(lines: list[dict], audio_files: list[Path], out_path: Path) -> Pat
 _DEFAULT_COLOR = "&H00FFFFFF"  # white
 
 
+import re as _re
+
+_SENT_SPLIT = _re.compile(r"(?<=[\.\!\?。！？])\s+|(?<=[\.\!\?。！？])(?=[A-Z가-힣])")
+
+
+def _chunk_text(text: str, max_chars: int = 28) -> list[str]:
+    """Strict sentence-level chunks. Each sentence becomes one subtitle entry; ASS handles wrap.
+
+    `max_chars` is kept for backwards compat but ignored — sentences are atomic.
+    """
+    text = text.strip()
+    sentences = [s.strip() for s in _SENT_SPLIT.split(text) if s.strip()]
+    return sentences or [text]
+
+
 def build_ass(
     lines: list[dict],
     audio_files: list[Path],
@@ -52,10 +67,13 @@ def build_ass(
     margin_v: int = 280,
     margin_lr: int = 35,
     font: str = "Malgun Gothic",
+    line_is_cover: list[bool] | None = None,
 ) -> Path:
     """ASS subtitle with per-speaker PrimaryColour (defined in VOICE_CONFIG).
 
     Defaults sized so Korean lines up to ~28 chars fit within a 1080-wide frame.
+    When `line_is_cover[i]` is True, that line renders centered (an5) instead of
+    bottom-anchored (an2) — useful when no figure is shown behind the text.
     """
     assert len(lines) == len(audio_files)
     speakers = sorted({l["speaker"] for l in lines})
@@ -72,12 +90,25 @@ def build_ass(
 
     events: list[str] = []
     cursor_ms = 0
-    for line, audio in zip(lines, audio_files):
+    for i, (line, audio) in enumerate(zip(lines, audio_files)):
         dur_ms = len(AudioSegment.from_file(audio))
-        start, end = cursor_ms, cursor_ms + dur_ms
-        text = line["text"].replace("\n", "\\N")
-        events.append(f"Dialogue: 0,{_fmt_ass(start)},{_fmt_ass(end)},{line['speaker']},,0,0,0,,{text}")
-        cursor_ms = end + int(line.get("pause_after_ms", 0))
+        if line.get("skip_subtitle"):
+            cursor_ms += dur_ms + int(line.get("pause_after_ms", 0))
+            continue
+        raw_text = line["text"].replace("\n", " ")
+        is_cover = bool(line_is_cover and i < len(line_is_cover) and line_is_cover[i])
+        chunks = _chunk_text(raw_text, max_chars=30)
+        total_len = sum(len(c) for c in chunks) or 1
+        chunk_start = cursor_ms
+        for ci, chunk in enumerate(chunks):
+            share = int(dur_ms * len(chunk) / total_len)
+            chunk_end = chunk_start + share if ci < len(chunks) - 1 else cursor_ms + dur_ms
+            text = chunk
+            if is_cover:
+                text = r"{\an5}" + text
+            events.append(f"Dialogue: 0,{_fmt_ass(chunk_start)},{_fmt_ass(chunk_end)},{line['speaker']},,0,0,0,,{text}")
+            chunk_start = chunk_end
+        cursor_ms += dur_ms + int(line.get("pause_after_ms", 0))
 
     ass = (
         "[Script Info]\n"

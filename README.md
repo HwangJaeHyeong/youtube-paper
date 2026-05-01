@@ -15,35 +15,45 @@ pip install -r requirements.txt
 
 # 3. API 키
 cp .env.example .env
-# .env 편집: GOOGLE_API_KEY 필수.
-# ANTHROPIC_API_KEY 는 비워두면 Claude Code 구독(OAuth)으로 돌아감.
+# .env 편집:
+#   NCP_CLOVA_KEY_ID, NCP_CLOVA_KEY  — 한국어 메인 TTS (CLOVA Voice Premium)
+#   GOOGLE_API_KEY                   — Gemini TTS (백업)
+#   ANTHROPIC_API_KEY                — 비워두면 Claude Code 구독(OAuth) 사용
 
-# 4. FFmpeg 설치 확인
+# 4. FFmpeg + Poppler 설치 확인
 ffmpeg -version
+pdftoppm -v   # poppler
 
-# 5. 파이프라인 실행 (HapticGen 테스트)
-python scripts/run_example.py
+# 5. arXiv 쇼츠 (예: VGGT)
+python -m src.pipeline shorts-only 2503.11651 \
+  --venue "CVPR 2025" --official-url "https://arxiv.org/abs/2503.11651"
+
+# 6. 로컬 PDF 쇼츠 (arXiv 없는 ACM/CHI 논문)
+#    PDF 를 data/papers/ 에 두고 scripts/run_local_shorts.py 의 케이스 추가
+python scripts/run_local_shorts.py alexnet
 ```
 
 ## 기술 스택
 
 | 역할 | 서비스 |
 |---|---|
-| 스크립트 생성 (LLM) | Claude Agent SDK (`claude-opus-4-7`, 구독 OAuth) |
-| 음성 합성 (TTS) | Google AI Studio — Gemini 2.5 TTS |
-| 영상 조립 | FFmpeg |
-| 논문 수집 | arXiv API |
-| 업로드 (Phase 4) | YouTube Data API v3 |
+| 스크립트 생성 (LLM) | Claude Sonnet 4.6 → Opus 4.7 polish (Claude Agent SDK) |
+| 한국어 TTS | Naver CLOVA Voice Premium (`nwoosik`, `vdain`) |
+| 영어 TTS | Edge TTS / Gemini 2.5 |
+| 영상 조립 | FFmpeg (filter_complex) |
+| 논문 수집 | arXiv API + 로컬 PDF |
+| 업로드 | YouTube Data API v3 (publishAt 예약 + 커스텀 썸네일) |
 
 ## 디렉터리
 
 ```
 src/
 ├── ingest/   # arXiv 다운로드, PDF 파싱
-├── script/   # Claude로 대화 스크립트 생성
-├── tts/      # Gemini TTS 래퍼
-├── video/    # FFmpeg 영상 조립
-└── upload/   # YouTube 업로드
+├── script/   # Claude로 대화 스크립트 생성 (self-critique + Opus polish)
+├── tts/      # CLOVA / Gemini / Edge TTS 래퍼
+├── video/    # FFmpeg 영상 조립, 타이틀 카드, ASS 자막, Figure 크롭
+└── upload/   # YouTube 업로드 (채널별 토큰)
 ```
 
-자세한 설계·프롬프트 원칙·개발 Phase 는 [CLAUDE.md](CLAUDE.md) 참조.
+상세 설계·프롬프트 원칙·운영 패턴은 [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) 참조.
+초기 기획서/철학은 [CLAUDE.md](CLAUDE.md) 참조.

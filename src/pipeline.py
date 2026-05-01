@@ -38,7 +38,12 @@ def _run_tts_and_merge(script: dict, slug: str) -> tuple[Path, list[Path], list[
     for i, line in enumerate(lines):
         wav = line_dir / f"{i:03d}_{line['speaker']}.wav"
         if not wav.exists():
-            tts.synthesize(line["text"], line["speaker"], wav, emotion=line.get("emotion", "neutral"))
+            # Title-card line is shown silently for 2 seconds (no TTS).
+            if line.get("visual_ref") == "__TITLE__":
+                from pydub import AudioSegment as _AS
+                _AS.silent(duration=1000).export(str(wav), format="wav")
+            else:
+                tts.synthesize(line["text"], line["speaker"], wav, emotion=line.get("emotion", "neutral"))
         wavs.append(wav)
         file_pairs.append((wav, int(line.get("pause_after_ms", 200))))
     merged = AUDIO_DIR / slug / f"{slug}.mp3"
@@ -52,13 +57,17 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
     wavs = sorted(line_dir.glob("*.wav"))
     assert len(wavs) == len(data["script"]), f"wav count {len(wavs)} != lines {len(data['script'])}"
 
-    ass = AUDIO_DIR / slug / f"{slug}.ass"
-    subtitle.build_ass(data["script"], wavs, ass)
-
-    paper_id = data.get("paper_id", slug).replace("-shorts", "")
-    pdf_candidates = list(PAPERS_DIR.glob(f"*{paper_id.split('-')[0]}*.pdf")) or list(PAPERS_DIR.glob("*.pdf"))
+    # Use the slug (which == arxiv_id in most cases) to find the PDF, NOT Claude's paper_id
+    # (Claude sometimes writes things like "word2vec-arxiv1301" which won't match the file).
+    base = slug.replace("-shorts", "")
+    candidates = [
+        PAPERS_DIR / f"{base}.pdf",
+        *PAPERS_DIR.glob(f"{base}*.pdf"),
+        *PAPERS_DIR.glob(f"*{base}*.pdf"),
+    ]
+    pdf_candidates = [p for p in candidates if p.exists()]
     if not pdf_candidates:
-        raise RuntimeError(f"No PDF found in {PAPERS_DIR} to use as slide background")
+        raise RuntimeError(f"No PDF found in {PAPERS_DIR} matching slug={base!r}")
     pdf = pdf_candidates[0]
 
     pages_dir = AUDIO_DIR / slug / "pages"
@@ -84,8 +93,27 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
         crops[ref] = out_png
     log.info("crops rendered: %d (%s)", len(crops), list(crops.keys()))
 
+    # Per-line flag: is this line shown over the plain cover (no figure)?
+    # Subtitles get centered on cover lines so they don't float uselessly at the bottom.
+    line_is_cover = [
+        figure_cropper.normalize_ref(l.get("visual_ref")) not in crops
+        for l in data["script"]
+    ]
+
+    ass = AUDIO_DIR / slug / f"{slug}.ass"
+    subtitle.build_ass(data["script"], wavs, ass, line_is_cover=line_is_cover)
+
     cover = AUDIO_DIR / slug / "cover.png"
     title_card.render_cover(cover)
+    from src.config import SHORTS_RESOLUTION, LONGFORM_RESOLUTION
+    size = SHORTS_RESOLUTION if is_shorts else LONGFORM_RESOLUTION
+    intro_line = next((l for l in data["script"] if l.get("visual_ref") == "__TITLE__"), None)
+    intro_title = (intro_line["text"] if intro_line else None) or data.get("title_hook") or data.get("paper_title", "")
+    if intro_line is not None:
+        tc = crops_dir / "__TITLE__.png"
+        teaser = crops_dir / "teaser.png"
+        title_card.render_title_card(intro_title, tc, size=size, teaser_path=teaser if teaser.exists() else None)
+        crops["__TITLE__"] = tc
     segments = composer.build_segments_v2(
         data["script"], wavs, pages, fig_index, crops, fallback_img=cover
     )
@@ -93,7 +121,9 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
 
     out_mp4 = VIDEOS_DIR / f"{slug}.mp4"
     if is_shorts:
-        composer.compose_shorts(mp3, ass, pages, segments, out_mp4)
+        header_png = crops_dir / "__HEADER__.png"
+        title_card.render_header_strip(intro_title, header_png, width=size[0])
+        composer.compose_shorts(mp3, ass, pages, segments, out_mp4, header_png=header_png)
     else:
         composer.compose_longform(mp3, ass, pages, segments, out_mp4)
     return out_mp4
@@ -159,23 +189,56 @@ def shorts_only(
     arxiv_id: str = typer.Argument(...),
     paper_slug: str = typer.Option(None),
     venue: str = typer.Option("arXiv"),
+    official_url: str = typer.Option("", help="공식 논문 링크 (ACM/IEEE/proceedings DOI). 설명에 삽입됨."),
+    lang: str = typer.Option("ko", help="ko | en"),
 ) -> None:
     """롱폼 없이 arxiv_id 에서 바로 쇼츠 생성 (스크립트 + TTS + mp4)."""
     base_slug = paper_slug or arxiv_id.replace("/", "_")
+    if lang == "en":
+        base_slug = f"{base_slug}-en"
     log.info("1/4 arXiv 다운: %s", arxiv_id)
     pdf = arxiv_fetcher.fetch_by_id(arxiv_id, dest_dir=PAPERS_DIR, slug=base_slug)
     paper = pdf_parser.parse(pdf)
 
-    log.info("2/4 쇼츠 스크립트 (self-critique 5회 반복)")
-    shorts_data = shorts_generator.generate_from_paper_iterative(
-        paper_title=paper.title or arxiv_id,
-        authors=paper.authors,
-        venue=venue,
-        paper_text=paper.text,
-        slug=base_slug,
-        rounds=5,
-    )
     shorts_slug = f"{base_slug}-shorts"
+    cached_script = SCRIPTS_DIR / f"{shorts_slug}.json"
+    if cached_script.exists():
+        log.info("2/4 기존 쇼츠 스크립트 재사용: %s", cached_script.name)
+        shorts_data = json.loads(cached_script.read_text(encoding="utf-8"))
+    else:
+        log.info("2/4 쇼츠 스크립트 (self-critique 5회 반복)")
+        shorts_data = shorts_generator.generate_from_paper_iterative(
+            paper_title=paper.title or arxiv_id,
+            authors=paper.authors,
+            venue=venue,
+            paper_text=paper.text,
+            slug=base_slug,
+            rounds=1,
+            lang=lang,
+        )
+        shorts_data.setdefault("metadata", {})["lang"] = lang
+    # Inject official_url into metadata if given via CLI so upload step sees it.
+    if official_url:
+        shorts_data.setdefault("metadata", {})["official_url"] = official_url
+    # Prepend title-intro line (centered title card + host reads title).
+    lines_ = shorts_data.get("script", [])
+    # If a stale intro line exists, drop it so we can reinject with latest title_hook.
+    if lines_ and lines_[0].get("visual_ref") == "__TITLE__":
+        lines_.pop(0)
+    if lines_:
+        host = lines_[0].get("speaker", "민재")
+        intro_text = shorts_data.get("title_hook") or shorts_data.get("paper_title", "")
+        intro_line = {
+            "section": "intro",
+            "speaker": host,
+            "text": intro_text,
+            "emotion": "neutral",
+            "pause_after_ms": 400,
+            "visual_ref": "__TITLE__",
+            "skip_subtitle": True,
+        }
+        shorts_data["script"].insert(0, intro_line)
+    cached_script.write_text(json.dumps(shorts_data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     log.info("3/4 쇼츠 TTS %d lines", len(shorts_data["script"]))
     mp3, _, _ = _run_tts_and_merge(shorts_data, shorts_slug)
@@ -186,26 +249,175 @@ def shorts_only(
     typer.echo(json.dumps({"shorts_slug": shorts_slug, "mp4": str(out)}))
 
 
+@app.command("anime-shorts")
+def anime_shorts(
+    name: str = typer.Argument(..., help="애니메이션 작품명 (한글/영문)."),
+    paper_slug: str = typer.Option(None, help="slug; 기본 = name을 소문자·언더스코어 변환."),
+    extra_info: str = typer.Option("", help="Claude 에게 추가로 줄 정보 (방영년도·감독 등)."),
+    official_url: str = typer.Option("", help="공식 링크 (AniList/MAL) — 설명란에 포함."),
+) -> None:
+    """애니메이션 이름 → 스크립트 → AI 이미지 → TTS → 쇼츠 mp4."""
+    from src.anime import script_gen as anime_script_gen
+    from src.anime import image_gen as anime_image_gen
+
+    import re as _re
+    slug = paper_slug or _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    shorts_slug = f"{slug}-shorts"
+    script_json = SCRIPTS_DIR / f"{shorts_slug}.json"
+    if script_json.exists():
+        log.info("1/4 기존 스크립트 재사용: %s", script_json.name)
+        data = json.loads(script_json.read_text(encoding="utf-8"))
+    else:
+        log.info("1/4 Claude 스크립트: %s", name)
+        data = anime_script_gen.generate(name, slug, extra_info)
+
+    if official_url:
+        data.setdefault("metadata", {})["official_url"] = official_url
+
+    # Anime: skip the title-intro line (첫 화면 = 첫 장면 이미지). 기존 __TITLE__ 라인이 있으면 제거.
+    lines_ = data.get("script", [])
+    if lines_ and lines_[0].get("visual_ref") == "__TITLE__":
+        lines_.pop(0)
+    # Assign scene_{i} visual_ref for lines that have image_prompt.
+    for i, ln in enumerate(data["script"]):
+        if ln.get("image_prompt"):
+            ln["visual_ref"] = f"scene_{i}"
+    script_json.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    log.info("2/4 TTS %d lines", len(data["script"]))
+    mp3, wavs, lines = _run_tts_and_merge(data, shorts_slug)
+
+    log.info("3/4 Nano Banana 이미지 생성")
+    scenes_dir = AUDIO_DIR / shorts_slug / "scenes"
+    scenes_dir.mkdir(parents=True, exist_ok=True)
+    crops: dict[str, Path] = {}
+    for i, ln in enumerate(data["script"]):
+        ref = ln.get("visual_ref")
+        if not ref or not ref.startswith("scene_"):
+            continue
+        out_png = scenes_dir / f"{ref}.png"
+        if not out_png.exists():
+            try:
+                anime_image_gen.generate(ln["image_prompt"], out_png)
+            except Exception as e:
+                log.warning("이미지 실패 (%s): %s — fallback to cover", ref, e)
+                continue
+        crops[ref] = out_png
+
+    log.info("4/4 영상 조립")
+    from src.config import SHORTS_RESOLUTION
+    wavs = sorted((AUDIO_DIR / shorts_slug / "lines").glob("*.wav"))
+    cover = AUDIO_DIR / shorts_slug / "cover.png"
+    title_card.render_cover(cover)
+
+    line_is_cover = [
+        (ln.get("visual_ref") not in crops)
+        for ln in data["script"]
+    ]
+    ass = AUDIO_DIR / shorts_slug / f"{shorts_slug}.ass"
+    subtitle.build_ass(data["script"], wavs, ass, line_is_cover=line_is_cover)
+
+    segments = composer.build_segments_v2(
+        data["script"], wavs, pages=[cover], figure_index={}, crops=crops, fallback_img=cover,
+    )
+    log.info("segments: %d, scenes: %d", len(segments), len([k for k in crops if k.startswith('scene_')]))
+    out_mp4 = VIDEOS_DIR / f"{shorts_slug}.mp4"
+    composer.compose_shorts(mp3, ass, [cover], segments, out_mp4)
+    typer.echo(json.dumps({"shorts_slug": shorts_slug, "mp4": str(out_mp4)}))
+
+
 @app.command()
 def upload(
     slug: str,
     privacy: str = typer.Option("private", help="private | unlisted | public"),
     shorts: bool = typer.Option(False, "--shorts", help="Mark as YouTube Shorts"),
+    channel: str = typer.Option("", help="채널 별칭 (token file 접미사). 비우면 기본 채널."),
+    publish_at: str = typer.Option("", help="RFC3339 예약 시각 (예: 2026-04-22T19:00:00+09:00)."),
 ) -> None:
     """생성된 mp4 를 YouTube 에 업로드."""
     mp4 = VIDEOS_DIR / f"{slug}.mp4"
-    script_json = SCRIPTS_DIR / f"{slug.replace('-shorts', '')}.json"
+    # Prefer the slug-exact JSON (e.g. "<slug>-shorts.json"); fall back to stripped variant.
+    script_json = SCRIPTS_DIR / f"{slug}.json"
+    if not script_json.exists():
+        script_json = SCRIPTS_DIR / f"{slug.replace('-shorts', '')}.json"
     if script_json.exists():
         data = json.loads(script_json.read_text(encoding="utf-8"))
         paper_title = data.get("paper_title", slug)
         verdict = data.get("rating", {}).get("verdict", "")
+        official_url = data.get("metadata", {}).get("official_url", "") or ""
+        lang = data.get("metadata", {}).get("lang", "ko")
+        title_hook = data.get("title_hook", "") or ""
+        primary_tag_raw = data.get("primary_tag", "") or ""
+        content_type = data.get("metadata", {}).get("content_type", "")
+        if not content_type:
+            # Detect by heuristic: anime scripts carry image_prompt per line.
+            if any(l.get("image_prompt") for l in data.get("script", [])):
+                content_type = "anime"
+            else:
+                content_type = "paper"
     else:
-        paper_title, verdict = slug, ""
-    prefix = "[Shorts] " if shorts else ""
-    title = f"{prefix}{paper_title}"
-    description = f"민재 X 수빈의 논문 까기 — {paper_title}\n\n한줄평: {verdict}\n\nGenerated by PaperCast."
-    tags = ["논문리뷰", "AI", "HCI", paper_title.split()[0] if paper_title else "papercast"]
-    video_id = yt_upload.upload(mp4, title, description, tags, privacy_status=privacy, is_shorts=shorts)
+        paper_title, verdict, official_url, lang = slug, "", "", "ko"
+        title_hook, primary_tag_raw, content_type = "", "", "paper"
+    import re as _re
+    title = title_hook if title_hook else paper_title
+    primary_tag = _re.sub(r"[^\w가-힣]", "", primary_tag_raw) if primary_tag_raw \
+        else _re.sub(r"[^\w가-힣]", "", (paper_title.split()[0] if paper_title else "PaperCast"))
+    if lang == "en":
+        hashtag_line = f"#PaperReview #AI #DeepLearning #MachineLearning #Research #{primary_tag}"
+        if shorts:
+            hashtag_line += " #Shorts"
+        official_line = f"📄 Paper: {official_url}\n\n" if official_url else ""
+        description = (
+            f"{paper_title}\n\n"
+            f"Takeaway: {verdict}\n\n"
+            f"{official_line}"
+            f"{hashtag_line}\n\n"
+            ""
+        )
+        tags = [
+            "PaperReview", "AI", "DeepLearning", "MachineLearning",
+            "Research", "Paper", "arxiv", primary_tag,
+        ]
+    elif content_type == "anime":
+        hashtag_line = f"#애니리뷰 #애니추천 #일본애니 #애니메이션 #{primary_tag}"
+        if shorts:
+            hashtag_line += " #Shorts"
+        official_line = f"🎬 작품 정보: {official_url}\n\n" if official_url else ""
+        description = (
+            f"{paper_title}\n\n"
+            f"한줄평: {verdict}\n\n"
+            f"{official_line}"
+            f"{hashtag_line}\n\n"
+            ""
+        )
+        tags = [
+            "애니리뷰", "애니추천", "애니메이션", "일본애니", "오타쿠",
+            "anime", "animereview", "animerecommendation",
+            primary_tag,
+        ]
+    else:
+        hashtag_line = f"#논문리뷰 #AI #딥러닝 #인공지능 #논문 #{primary_tag}"
+        if shorts:
+            hashtag_line += " #Shorts"
+        official_line = f"📄 논문 원문: {official_url}\n\n" if official_url else ""
+        description = (
+            f"{paper_title}\n\n"
+            f"한줄평: {verdict}\n\n"
+            f"{official_line}"
+            f"{hashtag_line}\n\n"
+            ""
+        )
+        tags = [
+            "논문리뷰", "AI", "딥러닝", "머신러닝", "인공지능", "논문",
+            "논문추천", "MachineLearning", "DeepLearning", "Research", "Paper",
+            primary_tag,
+        ]
+    if shorts:
+        tags.append("Shorts")
+    video_id = yt_upload.upload(
+        mp4, title, description, tags, privacy_status=privacy, is_shorts=shorts,
+        channel=channel or None, publish_at=publish_at or None,
+    )
     typer.echo(json.dumps({"video_id": video_id, "url": f"https://www.youtube.com/watch?v={video_id}"}))
 
 

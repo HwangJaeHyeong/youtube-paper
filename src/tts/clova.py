@@ -29,11 +29,15 @@ from src.config import (
 from src.tts.base import TTSProvider
 
 _ELLIPSIS_RE = re.compile(r"\.{2,}|…+")
+# CLOVA reads em-dash (—) and en-dash (–) as "마이너스". Replace with comma for natural pause.
+_DASH_RE = re.compile(r"\s*[—–]\s*")
 
 
 def _sanitize(text: str) -> str:
     # CLOVA V-series rejects "…" and "..." with VS26. Replace with a comma.
     text = _ELLIPSIS_RE.sub(",", text)
+    # em-dash / en-dash → comma (avoid "마이너스" pronunciation).
+    text = _DASH_RE.sub(", ", text)
     # Normalize stray whitespace
     text = re.sub(r"\s+", " ", text).strip()
     return text

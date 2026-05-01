@@ -2,6 +2,7 @@
 # Uses Claude Code OAuth (subscription); ANTHROPIC_API_KEY is optional (only for cron).
 claude-agent-sdk>=0.1.0
 google-genai>=1.70.0
+edge-tts>=6.1.0
 
 # Paper ingestion
 arxiv>=2.1.0
@@ -12,6 +13,7 @@ pymupdf>=1.24.0
 # Video / audio
 ffmpeg-python>=0.2.0
 pydub>=0.25.1
+Pillow>=10.4.0
 
 # YouTube upload (Phase 4)
 google-api-python-client>=2.140.0
@@ -24,6 +26,7 @@ pydantic>=2.8.0
 typer>=0.12.0
 rich>=13.7.0
 httpx>=0.27.0
+requests>=2.32.0
 
 # Dev
 pytest>=8.3.0

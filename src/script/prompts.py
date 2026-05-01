@@ -31,9 +31,14 @@ intro → background → method → results → backstory → limitations → ra
 오직 JSON 한 덩어리만 출력. 앞뒤 설명·마크다운 코드블록 금지.
 스키마는 사용자 메시지에 명시됨.
 
+[visual_ref — Figure/Table 동기화 필수]
+- 각 라인에 `visual_ref` 필드 포함. 해당 라인이 특정 Figure/Table 을 가리킬 때 정확히 "Figure N" 또는 "Table N" 문자열. 아니면 null.
+- 전체 스크립트에서 최소 5회 이상 visual_ref 설정 (method/results 섹션 위주).
+- 괄호 주석·설명 금지. "Figure 2" O, "Figure 2 (오른쪽)" X.
+
 [절대 규칙]
-script 배열의 **모든 원소**는 반드시 아래 5개 필드 전부 포함:
-  section, speaker, text, emotion, pause_after_ms
+script 배열의 **모든 원소**는 반드시 아래 6개 필드 전부 포함:
+  section, speaker, text, emotion, pause_after_ms, visual_ref
 하나라도 빠지면 파싱 실패. 특히 speaker 누락 주의.
 """
 
@@ -64,7 +69,8 @@ def user_prompt(paper_title: str, authors: list[str], venue: str, paper_text: st
       "speaker": "민재|수빈",
       "text": "한국어 대사",
       "emotion": "neutral|skeptical|excited|dry|amused",
-      "pause_after_ms": int
+      "pause_after_ms": int,
+      "visual_ref": "Figure N | Table N | null"
     }}
   ],
   "rating": {{

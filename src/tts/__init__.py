@@ -18,6 +18,9 @@ def _get(provider: str) -> TTSProvider:
     elif provider == "gemini":
         from src.tts.gemini import GeminiTTS
         _instances[provider] = GeminiTTS()
+    elif provider == "edge":
+        from src.tts.edge import EdgeTTS
+        _instances[provider] = EdgeTTS()
     else:
         raise ValueError(f"unknown TTS provider: {provider!r}")
     return _instances[provider]
