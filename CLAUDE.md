@@ -212,6 +212,81 @@ VOICE_CONFIG = {
 2. 프롬프트 엔지니어링 반복
 3. 시청자 피드백 반영
 
+## 쇼츠 1편 제작 워크플로 (현 운영 표준)
+
+> 위쪽 "스크립트 JSON 스키마" 섹션은 **롱폼 멀티스피커** 비전. 현재 운영 중인 쇼츠는 **민재 단독, 10줄 고정 템플릿**으로 발산. 새 논문 1편을 처리할 때는 아래 패턴을 그대로 복제할 것.
+
+### 4개 산출물 (slug 기준 통일)
+새 슬러그를 정한다 (예: `aivtuber`). 4개 위치에 같은 슬러그를 쓴다.
+
+| 위치 | 파일 | 역할 |
+|---|---|---|
+| `data/papers/<slug>.pdf` | 논문 원문 | 수치·인용 검증용 (PDF 직접 다운) |
+| `data/scripts/<slug>-shorts.json` | 스크립트 | 아래 10줄 템플릿 |
+| `scripts/rebuild_<slug>.py` | 빌드 | CLOVA TTS + 영상 합성 |
+| `scripts/upload_<slug>.py` | 업로드 | YouTube **private** 업로드 |
+
+### 10줄 단일 화자 템플릿 (정확히 이 구성)
+```
+intro      [0] "X 멘탈이 나가버렸습니다."         (350ms pause)
+intro      [1] "<충격적 사실 한 줄>거든요."         (300ms)
+background [2] "원래 <기존 방식>"                   (250ms)
+method     [3] "근데 <연구팀>이 <뭘 했는지>"        (300ms)
+method     [4] "<핵심 수치/결과 1>"                 (300ms)
+method     [5] "<핵심 수치/결과 2>"                 (350ms)
+method     [6] "그게 <이름>의 핵심 아이디어입니다."  (400ms)
+backstory  [7] "근데 진짜 무서운 건, <뒷이야기>"   (350ms, emotion: solemn)
+outro      [8] "<랩명>이 <학회>에 발표한 논문이에요." (350ms)
+outro      [9] "X들 다들 어디 갔을까요?"            (0ms, emotion: deadpan)
+```
+- 모든 줄 `speaker: "민재"`, `lang: "ko"`, `estimated_duration_sec: 38`
+- `visual_ref`는 Figure 번호 또는 `null`
+- 첫 줄 `X`와 마지막 줄 `X`는 동일한 직군 (예: "한국 판사들" / "사주 도사들" / "트위치 인간 버튜버들")
+
+### title_hook 패턴
+```
+"X 멘탈을 날려버린 Y\n(**랩명/소속** 논문 약칭)"
+```
+- 교수 이름 금지, **랩/연구소/학교 이름만** (예: "KAIST + LBox", "중국과학원 + 상하이푸둥검찰", "Notre Dame 데이터마이닝")
+- 메모리: `feedback_no_professor_names.md`, `feedback_title_pattern.md` 참조
+
+### 메타데이터 필수 키
+```json
+{
+  "paper_id": "<slug>-shorts",
+  "paper_title": "<영문 원제>",
+  "title_hook": "...",
+  "primary_tag": "<CamelCase 약칭, hashtag로 쓰임>",
+  "authors": ["First Author", "et al."],
+  "venue": "<학회 + 연도>",
+  "metadata": {"target_length": "shorts", "estimated_duration_sec": 38, "lang": "ko", "official_url": "<arXiv/DOI>"},
+  "rating": {"민재": 5.0, "verdict": "<한 줄 평>"}
+}
+```
+
+### 빌드/업로드 스크립트 템플릿
+참고 원본: `scripts/rebuild_aiprosecutor.py`, `scripts/upload_lcube.py`. 새 슬러그용은 SLUG·해시태그 리스트만 갈아끼우면 됨.
+- rebuild: `_run_tts_and_merge(data, SLUG)` → `_generate_video(SLUG, ..., is_shorts=True, subtitle_style="hype", sticky_visuals=False)`
+- upload: `privacy_status="private"`, `is_shorts=True`, 해시태그는 도메인별 (논문리뷰/AI는 공통, 나머지는 주제별)
+
+### 실행 순서
+1. PDF 다운 → `data/papers/<slug>.pdf`
+2. 논문 읽고 **수치·소속 검증** (Claude가 만든 줄은 반드시 원문 대조)
+3. JSON 작성 → 사용자 확인 받기
+4. `.venv/bin/python scripts/rebuild_<slug>.py` (CLOVA TTS 호출됨, 비용 발생)
+5. **1.2배속 fast 변환** (업로드 스크립트가 `<slug>-shorts-fast.mp4`를 요구):
+   ```bash
+   ffmpeg -y -i data/videos/<slug>-shorts.mp4 \
+     -filter_complex "[0:v]setpts=PTS/1.2[v];[0:a]atempo=1.2[a]" \
+     -map "[v]" -map "[a]" -c:v libx264 -preset fast -crf 20 \
+     -c:a aac -b:a 192k -movflags +faststart \
+     data/videos/<slug>-shorts-fast.mp4
+   ```
+6. `data/videos/<slug>-shorts-fast.mp4` 사람이 미리보기
+7. `.venv/bin/python scripts/upload_<slug>.py` (private 업로드, 사용자가 YouTube Studio에서 수동 공개)
+
+> Python은 반드시 프로젝트 `.venv` 사용 (`typer` 등 의존성이 시스템 파이썬에 없음).
+
 ## 개발 시 금기 사항
 
 - **로컬에서 무거운 AI 모델 돌리지 말 것** — 전부 API 사용
