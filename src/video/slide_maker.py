@@ -1,19 +1,20 @@
-"""Render paper pages as slide images (PNG). Uses the project-local poppler."""
+"""Render paper pages as slide images (PNG) via PyMuPDF (no poppler needed)."""
 from __future__ import annotations
 
 from pathlib import Path
 
-from pdf2image import convert_from_path
-
-from src.config import POPPLER_BIN
+import fitz  # PyMuPDF
 
 
 def render_pages(pdf_path: Path, out_dir: Path, dpi: int = 150) -> list[Path]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    images = convert_from_path(str(pdf_path), dpi=dpi, poppler_path=str(POPPLER_BIN))
+    zoom = dpi / 72.0
+    matrix = fitz.Matrix(zoom, zoom)
     paths: list[Path] = []
-    for i, img in enumerate(images, start=1):
-        p = out_dir / f"page_{i:03d}.png"
-        img.save(p, "PNG")
-        paths.append(p)
+    with fitz.open(str(pdf_path)) as doc:
+        for i, page in enumerate(doc, start=1):
+            pix = page.get_pixmap(matrix=matrix, alpha=False)
+            p = out_dir / f"page_{i:03d}.png"
+            pix.save(str(p))
+            paths.append(p)
     return paths

@@ -14,10 +14,23 @@ from pypdf import PdfReader
 # figure/table CAPTION line (followed by ":" or "."), which lives on the page
 # showing the figure. Body-text references like "as in Figure 1" can occur on
 # any page and would mislead the mapping.
-_CAPTION_PATTERNS = [
-    # Standard ("Figure 1:" / "Fig. 1.") + Nature-style ("Fig. 1 |").
-    re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*[:.|]"),
-    re.compile(r"(?i)\b(table)\s*(\d+)\s*[:.|]"),
+# STRICT caption patterns (unambiguous: Nature pipe, colon, ISSCC session form).
+# Body references like "as shown in Fig. 2," cannot match these.
+_STRICT_PATTERNS = [
+    # ISSCC session-based ("Figure 31.5.1:") — last component is canonical.
+    re.compile(r"(?i)\b(figure|fig\.)\s*\d+\.\d+\.(\d+)\s*[:.]"),
+    # Nature pipe ("Fig. 1 | Title...")
+    re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*\|"),
+    # Colon ("Figure 1: Title", CHI/ACM/IEEE)
+    re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*:"),
+    re.compile(r"(?i)\b(table)\s*(\d+)\s*[:|]"),
+]
+# LOOSE patterns — period after the number. Captures real captions in some
+# IEEE styles but ALSO catches sentence-ending body references. Used only as
+# a fallback when strict patterns produced no hit for a given key.
+_LOOSE_PATTERNS = [
+    re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*\."),
+    re.compile(r"(?i)\b(table)\s*(\d+)\s*\."),
 ]
 
 
@@ -31,12 +44,23 @@ def _normalize(kind: str, number: str) -> str:
 
 
 def build_index(pdf_path: Path) -> dict[str, int]:
-    """Return {'Figure 1': page_idx_1_based, 'Table 3': 8, ...}. First-occurrence wins."""
+    """Return {'Figure 1': page_idx_1_based, ...}. Strict captions win over body refs.
+
+    Two-pass: first scan every page for unambiguous caption forms (pipe / colon /
+    ISSCC). Only when no strict match was found for a given key does the loose
+    period-pattern fill in. This avoids indexing body sentences ("...as shown in
+    Fig. 2.") as caption locations.
+    """
     reader = PdfReader(str(pdf_path))
+    pages_text = [(i, p.extract_text() or "") for i, p in enumerate(reader.pages, start=1)]
     index: dict[str, int] = {}
-    for page_idx, page in enumerate(reader.pages, start=1):
-        text = page.extract_text() or ""
-        for pat in _CAPTION_PATTERNS:
+    for pat in _STRICT_PATTERNS:
+        for page_idx, text in pages_text:
+            for m in pat.finditer(text):
+                key = _normalize(m.group(1), m.group(2))
+                index.setdefault(key, page_idx)
+    for pat in _LOOSE_PATTERNS:
+        for page_idx, text in pages_text:
             for m in pat.finditer(text):
                 key = _normalize(m.group(1), m.group(2))
                 index.setdefault(key, page_idx)
