@@ -87,3 +87,7 @@ src/
 ```bash
 python scripts/rebuild_hapticraft.py --pdf "/path/to/HaptiCraft.pdf"
 ```
+
+### 다른 논문 영상 재현
+
+공통 레시피 제작기와 Generative Agents 예제는 [논문별 재현 가이드](docs/paper-recipes.md)를 참고하세요. 원본 PDF와 저장된 음성·타이밍·figure 설정으로 API 호출 없이 재현하며, YouTube에는 업로드하지 않습니다.

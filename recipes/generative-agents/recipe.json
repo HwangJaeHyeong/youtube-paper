@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "slug": "generative-agents",
+  "title_hook": "NPC들이 **파티**를 연다고?\n(**Stanford + Google** Generative Agents)",
+  "paper": {
+    "title": "Generative Agents: Interactive Simulacra of Human Behavior",
+    "doi": "10.1145/3586183.3606763",
+    "expected_pages": 22,
+    "sha256": "6490bd216f063d924ef3a4999faad7ff54acedad71993c764ffd843059faceda"
+  },
+  "script": [
+    {
+      "text": "NPC들끼리 알아서 파티를 연다고요?",
+      "speaker": "민재"
+    },
+    {
+      "text": "AI 25명을 작은 마을에 살게 했더니, 파티에 초대하고 약속까지 잡았습니다.",
+      "speaker": "민재"
+    },
+    {
+      "text": "보통 게임 캐릭터는 정해진 행동과 대사를 반복하잖아요.",
+      "speaker": "민재"
+    },
+    {
+      "text": "Generative Agents는 경험을 기억하고, 돌아보고, 다음 행동을 계획하게 만들었어요.",
+      "speaker": "민재"
+    },
+    {
+      "text": "한 캐릭터에게 Valentine’s Day 파티를 열고 싶다는 설정을 줬습니다.",
+      "speaker": "민재"
+    },
+    {
+      "text": "초대받은 12명 중 5명이 실제로 모였어요. 바쁘다며 안 온 캐릭터도 있었고요.",
+      "speaker": "민재"
+    },
+    {
+      "text": "핵심은 Memory, Reflection, Planning. 기억을 바탕으로 다음 행동을 고르는 거죠.",
+      "speaker": "민재"
+    },
+    {
+      "text": "근데 그럴듯하다고 다 맞는 건 아니에요. 없던 일정을 지어내는 오류도 있었습니다.",
+      "speaker": "민재"
+    },
+    {
+      "text": "Stanford와 Google 연구팀이 UIST 2023에 발표한 논문입니다.",
+      "speaker": "민재"
+    },
+    {
+      "text": "이제 NPC도 저보다 사회생활을 잘하겠는데요?",
+      "speaker": "민재"
+    }
+  ],
+  "voice": {
+    "name": "Puck",
+    "model": "gemini-2.5-flash-preview-tts",
+    "speed": 1.2,
+    "continuous_take": true
+  },
+  "reference": {
+    "audio": "reference/narration-1.2x.wav",
+    "words": "reference/words.json",
+    "audio_sha256": "373224c60121c83efce8debb41b11d2c395d6f28c8308fe1d3232720657e533e",
+    "script_sha256": "5be554259c9cf1276645ee72748421377593ef00ac1eccac27b1db80dc42b028",
+    "words_sha256": "3a31e23ba85be669cd501854c606e46433bffac58e96cf3f8cba86d1b2736c35"
+  },
+  "figures": {
+    "1": {
+      "page": 1,
+      "image_index": 0
+    },
+    "3": {
+      "page": 7,
+      "image_index": 0
+    },
+    "4": {
+      "page": 7,
+      "image_index": 1
+    },
+    "5": {
+      "page": 8,
+      "image_index": 0
+    },
+    "6": {
+      "page": 9,
+      "image_index": 0
+    },
+    "7": {
+      "page": 10,
+      "image_index": 0
+    },
+    "9": {
+      "page": 16,
+      "image_index": 0
+    }
+  },
+  "shots": [
+    {
+      "line": 0,
+      "cue": null,
+      "figure": 4
+    },
+    {
+      "line": 1,
+      "cue": null,
+      "figure": 1
+    },
+    {
+      "line": 1,
+      "cue": "파티에",
+      "figure": 9
+    },
+    {
+      "line": 2,
+      "cue": null,
+      "figure": 3
+    },
+    {
+      "line": 3,
+      "cue": null,
+      "figure": 5
+    },
+    {
+      "line": 4,
+      "cue": null,
+      "figure": 9
+    },
+    {
+      "line": 5,
+      "cue": null,
+      "figure": 4
+    },
+    {
+      "line": 5,
+      "cue": "바쁘다며",
+      "figure": 1,
+      "rect": [
+        0.2,
+        0,
+        0.45,
+        0.49
+      ]
+    },
+    {
+      "line": 6,
+      "cue": null,
+      "figure": 5
+    },
+    {
+      "line": 6,
+      "cue": "기억을",
+      "figure": 6
+    },
+    {
+      "line": 7,
+      "cue": null,
+      "figure": 7
+    },
+    {
+      "line": 8,
+      "cue": null,
+      "figure": 1
+    },
+    {
+      "line": 9,
+      "cue": null,
+      "figure": 4
+    }
+  ],
+  "intro_demo": {
+    "path": "reference/intro-demo.mp4",
+    "end_line": 2,
+    "source": "https://reverie.herokuapp.com/arXiv_Demo/",
+    "description": "Recorded original public web replay; the intro shows agents moving in Smallville, not the actual party.",
+    "sha256": "cd8ef2ea47dbd73c383d51cdf3848d012db50b06b526e8e4395ef5025cfec277"
+  },
+  "layout": {
+    "figure_box": [
+      0,
+      500,
+      1080,
+      1250
+    ],
+    "caption_y": 1320,
+    "caption_font_size": 88
+  }
+}
