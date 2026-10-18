@@ -1,0 +1,44 @@
+# `docker compose up` : input/*.pdf -> output/*.mp4, finished PDFs -> input/finished/,
+# then both containers exit (app tells qwen-tts to shut down) and `up` returns.
+services:
+  qwen-tts:
+    build: docker/qwen-tts
+    ports:
+      - "127.0.0.1:8880:8880"
+    environment:
+      - QWEN_TTS_MODEL=${QWEN_TTS_MODEL:-Qwen/Qwen3-TTS-12Hz-1.7B-Base}
+    volumes:
+      - hf-cache:/root/.cache/huggingface  # model downloaded once, kept across restarts
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8880/')"]
+      interval: 10s
+      start_period: 30m  # first start downloads the model
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - QWEN_TTS_URL=http://qwen-tts:8880/tts
+      - QWEN_TTS_SHUTDOWN_AFTER=1
+      - TZ=Asia/Seoul  # log timestamps in KST
+      - YOUTUBE_UPLOAD=${YOUTUBE_UPLOAD-private}  # private|unlisted|public, set empty in .env = no upload
+      - DATA_DIR=/app/data
+    volumes:
+      - .:/app
+    depends_on:
+      qwen-tts:
+        condition: service_healthy
+
+volumes:
+  hf-cache:

@@ -18,12 +18,25 @@ def _get(provider: str) -> TTSProvider:
     elif provider == "gemini":
         from src.tts.gemini import GeminiTTS
         _instances[provider] = GeminiTTS()
+    elif provider == "qwen":
+        from src.tts.qwen import QwenTTS
+        _instances[provider] = QwenTTS()
     elif provider == "edge":
         from src.tts.edge import EdgeTTS
         _instances[provider] = EdgeTTS()
     else:
         raise ValueError(f"unknown TTS provider: {provider!r}")
     return _instances[provider]
+
+
+def synthesize_many(items: list[tuple[str, str, Path, str]]) -> None:
+    """(text, speaker, out_path, emotion) 목록 합성. Qwen 화자는 GPU 배치로 한꺼번에."""
+    qwen = [(t, s, p) for t, s, p, _ in items if VOICE_CONFIG[s]["provider"] == "qwen"]
+    if qwen:
+        _get("qwen").synthesize_many(qwen)  # type: ignore[attr-defined]
+    for t, s, p, e in items:
+        if VOICE_CONFIG[s]["provider"] != "qwen":
+            synthesize(t, s, p, emotion=e)
 
 
 def synthesize(text: str, speaker: str, out_path: Path, emotion: str = "neutral") -> Path:

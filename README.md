@@ -59,7 +59,7 @@ Codex 연동은 공식 [비대화형 CLI 옵션](https://learn.chatgpt.com/docs/
 | 역할 | 서비스 |
 |---|---|
 | 스크립트 생성 (LLM) | Claude Agent SDK / Codex CLI 선택 가능 |
-| 한국어 TTS | Naver CLOVA Voice Premium (`nwoosik`, `vdain`) |
+| 한국어 TTS | Qwen3-TTS 로컬 GPU Docker 서버 (기본, `KO_TTS=qwen`, `docker compose up -d qwen-tts`) / Naver CLOVA Voice Premium (`KO_TTS=clova`) |
 | 영어 TTS | Edge TTS / Gemini 2.5 |
 | 영상 조립 | FFmpeg (filter_complex) |
 | 논문 수집 | arXiv API + 로컬 PDF |

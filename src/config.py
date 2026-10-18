@@ -47,10 +47,24 @@ GEMINI_TTS_MODEL = "gemini-2.5-flash-preview-tts"
 # https://api.ncloud-docs.com/docs/ai-naver-clovavoice-ttspremium
 CLOVA_TTS_URL = "https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts"
 
+# --- TTS: Qwen3-TTS (local GPU via Docker server: `docker compose up -d qwen-tts`) ---
+# https://github.com/QwenLM/Qwen3-TTS — model is chosen in docker-compose.yml (QWEN_TTS_MODEL)
+QWEN_TTS_URL = os.getenv("QWEN_TTS_URL", "http://127.0.0.1:8880/tts")
+# Lines per GPU forward pass. 16GB VRAM (RTX 5070 Ti) 기준 시작값 — OOM 나면 줄이고, 여유 있으면 올릴 것.
+QWEN_TTS_BATCH = int(os.getenv("QWEN_TTS_BATCH", "16"))
+# Korean host voices: qwen (default) | clova
+KO_TTS = os.getenv("KO_TTS", "qwen").strip().lower()
+
 VOICE_CONFIG: dict[str, dict] = {
     "민재": {
-        "provider": "clova",
+        "provider": KO_TTS,
         "speaker": "nwoosik",
+        # Qwen3-TTS Base voice clone: 참고 음성 + 그 음성의 정확한 대본
+        "qwen_ref_audio": PROJECT_ROOT / "voices" / "minjae_ref.mp3",
+        "qwen_ref_text": (
+            "알고 보니까 태권도 여러분들, 뭐 뭔 태권도가 있고 이게 다 살짝 좀 다르더만. "
+            "근데 알고 보니까 엄청 유명하신 분인 거야."
+        ),
         "speed": -3,
         "pitch": 0,
         "volume": 0,
@@ -58,8 +72,13 @@ VOICE_CONFIG: dict[str, dict] = {
         "subtitle_color": "&H00E8993D",
     },
     "수빈": {
-        "provider": "clova",
+        "provider": KO_TTS,
         "speaker": "vdain",
+        "qwen_ref_audio": PROJECT_ROOT / "voices" / "subin_ref.mp3",
+        "qwen_ref_text": (
+            "삼이일하고 떴을 때 보인 사람한테. 자, 일, 이, 삼, 사, 오. 일, 이, 삼, 사, 오. "
+            "눈 감았다 떴을 때 제 맨 밑에 있는 댓글로 뽑겠습니다."
+        ),
         "speed": -3,
         "pitch": -2,
         "volume": 0,

@@ -6,11 +6,17 @@ Commands:
     python -m src.pipeline shorts <slug>            # 쇼츠: 스크립트 + mp3 + mp4
     python -m src.pipeline upload <slug> [--shorts] [--public]
     python -m src.pipeline all <arxiv_id>           # 위 전부
+    python -m src.pipeline inbox                    # input/*.pdf -> output/*.mp4 (docker compose up)
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
+import re
+import shutil
+import urllib.request
 from pathlib import Path
 
 import typer
@@ -35,15 +41,18 @@ def _run_tts_and_merge(script: dict, slug: str) -> tuple[Path, list[Path], list[
     lines = script["script"]
     wavs: list[Path] = []
     file_pairs: list[tuple[Path, int]] = []
-    for i, line in enumerate(lines):
-        wav = line_dir / f"{i:03d}_{line['speaker']}.wav"
+    paths = [line_dir / f"{i:03d}_{line['speaker']}.wav" for i, line in enumerate(lines)]
+    # Synthesize all missing lines up front so batched providers (Qwen) can fill the GPU.
+    tts.synthesize_many([
+        (line["text"], line["speaker"], wav, line.get("emotion", "neutral"))
+        for line, wav in zip(lines, paths)
+        if not wav.exists() and line.get("visual_ref") != "__TITLE__"
+    ])
+    for line, wav in zip(lines, paths):
         if not wav.exists():
             # Title-card line is shown silently for 2 seconds (no TTS).
-            if line.get("visual_ref") == "__TITLE__":
-                from pydub import AudioSegment as _AS
-                _AS.silent(duration=1000).export(str(wav), format="wav")
-            else:
-                tts.synthesize(line["text"], line["speaker"], wav, emotion=line.get("emotion", "neutral"))
+            from pydub import AudioSegment as _AS
+            _AS.silent(duration=1000).export(str(wav), format="wav")
         wavs.append(wav)
         file_pairs.append((wav, int(line.get("pause_after_ms", 200))))
     merged = AUDIO_DIR / slug / f"{slug}.mp3"
@@ -128,14 +137,9 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool, su
     if is_shorts:
         header_png = crops_dir / "__HEADER__.png"
         title_card.render_header_strip(intro_title, header_png, width=size[0])
-        footer_png = crops_dir / "__FOOTER__.png"
-        title_card.render_footer_strip(
-            "다음 논문은 **댓글**로 추천 받아요",
-            footer_png, width=size[0],
-        )
         composer.compose_shorts(
             mp3, ass, pages, segments, out_mp4,
-            header_png=header_png, footer_png=footer_png,
+            header_png=header_png,
         )
     else:
         composer.compose_longform(mp3, ass, pages, segments, out_mp4)
@@ -211,6 +215,12 @@ def shorts_only(
         base_slug = f"{base_slug}-en"
     log.info("1/4 arXiv 다운: %s", arxiv_id)
     pdf = arxiv_fetcher.fetch_by_id(arxiv_id, dest_dir=PAPERS_DIR, slug=base_slug)
+    out = _shorts_from_pdf(pdf, base_slug, venue, official_url, lang)
+    typer.echo(json.dumps({"shorts_slug": f"{base_slug}-shorts", "mp4": str(out)}))
+
+
+def _shorts_from_pdf(pdf: Path, base_slug: str, venue: str, official_url: str = "", lang: str = "ko") -> Path:
+    """PDF (in PAPERS_DIR, named after base_slug) -> shorts script + TTS + mp4."""
     paper = pdf_parser.parse(pdf)
 
     shorts_slug = f"{base_slug}-shorts"
@@ -221,7 +231,7 @@ def shorts_only(
     else:
         log.info("2/4 쇼츠 스크립트 (self-critique 5회 반복)")
         shorts_data = shorts_generator.generate_from_paper_iterative(
-            paper_title=paper.title or arxiv_id,
+            paper_title=paper.title or base_slug,
             authors=paper.authors,
             venue=venue,
             paper_text=paper.text,
@@ -258,8 +268,57 @@ def shorts_only(
 
     log.info("4/4 쇼츠 영상 조립")
     script_json = SCRIPTS_DIR / f"{shorts_slug}.json"
-    out = _generate_video(shorts_slug, script_json, mp3, is_shorts=True)
-    typer.echo(json.dumps({"shorts_slug": shorts_slug, "mp4": str(out)}))
+    return _generate_video(shorts_slug, script_json, mp3, is_shorts=True)
+
+
+@app.command()
+def inbox(
+    in_dir: Path = typer.Option(Path("input"), help="처리할 PDF 폴더"),
+    out_dir: Path = typer.Option(Path("output"), help="완성 mp4 폴더"),
+    venue: str = typer.Option("", help="학회 표기 (모든 PDF 공통)"),
+) -> None:
+    """input/*.pdf -> 쇼츠 mp4 를 output/ 에 (+ YOUTUBE_UPLOAD 설정 시 업로드), 끝난 PDF 는 input/finished/ 로. 실패한 PDF 는 그대로 둠."""
+    done = in_dir / "finished"
+    done.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pdfs = sorted(in_dir.glob("*.pdf"))
+    log.info("inbox: %d PDF", len(pdfs))
+    try:
+        failed = _process_inbox(pdfs, done, out_dir, venue)
+    finally:
+        if os.getenv("QWEN_TTS_SHUTDOWN_AFTER"):  # docker compose: stop the GPU server too
+            from src.config import QWEN_TTS_URL
+            try:
+                urllib.request.urlopen(urllib.request.Request(QWEN_TTS_URL.replace("/tts", "/shutdown"), b""), timeout=10)
+            except OSError:
+                pass
+    if failed:
+        raise typer.Exit(1)
+
+
+def _process_inbox(pdfs: list[Path], done: Path, out_dir: Path, venue: str) -> int:
+    failed = 0
+    for pdf in pdfs:
+        # Slug must be ASCII-safe (file globbing); hash keeps Korean-named PDFs unique.
+        ascii_part = re.sub(r"[^a-z0-9]+", "-", pdf.stem.lower()).strip("-")[:40]
+        slug = f"{ascii_part or 'paper'}-{hashlib.sha1(pdf.name.encode()).hexdigest()[:6]}"
+        try:
+            shutil.copy2(pdf, PAPERS_DIR / f"{slug}.pdf")
+            mp4 = _shorts_from_pdf(PAPERS_DIR / f"{slug}.pdf", slug, venue)
+            shutil.copy2(mp4, out_dir / f"{pdf.stem}.mp4")
+            # YOUTUBE_UPLOAD=private|unlisted|public uploads as Shorts; empty = skip.
+            # Marker file prevents re-uploading when the same PDF is processed again.
+            uploaded = VIDEOS_DIR / f"{slug}-shorts.youtube"
+            if (privacy := os.getenv("YOUTUBE_UPLOAD", "")) and not uploaded.exists():
+                uploaded.write_text(upload(f"{slug}-shorts", privacy=privacy, shorts=True, channel="", publish_at=""))
+            elif uploaded.exists():
+                log.info("already uploaded: https://www.youtube.com/watch?v=%s (skip)", uploaded.read_text().strip())
+            shutil.move(str(pdf), str(done / pdf.name))
+            log.info("done: %s -> %s", pdf.name, out_dir / f"{pdf.stem}.mp4")
+        except Exception:
+            failed += 1
+            log.exception("failed: %s (left in %s)", pdf.name, pdf.parent)
+    return failed
 
 
 @app.command("anime-shorts")
@@ -346,8 +405,8 @@ def upload(
     shorts: bool = typer.Option(False, "--shorts", help="Mark as YouTube Shorts"),
     channel: str = typer.Option("", help="채널 별칭 (token file 접미사). 비우면 기본 채널."),
     publish_at: str = typer.Option("", help="RFC3339 예약 시각 (예: 2026-04-22T19:00:00+09:00)."),
-) -> None:
-    """생성된 mp4 를 YouTube 에 업로드."""
+) -> str:
+    """생성된 mp4 를 YouTube 에 업로드. Returns video id."""
     mp4 = VIDEOS_DIR / f"{slug}.mp4"
     # Prefer the slug-exact JSON (e.g. "<slug>-shorts.json"); fall back to stripped variant.
     script_json = SCRIPTS_DIR / f"{slug}.json"
@@ -432,6 +491,7 @@ def upload(
         channel=channel or None, publish_at=publish_at or None,
     )
     typer.echo(json.dumps({"video_id": video_id, "url": f"https://www.youtube.com/watch?v={video_id}"}))
+    return video_id
 
 
 @app.command("all")

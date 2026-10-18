@@ -7,6 +7,7 @@ numbers in an accent color so the eye stops on them.
 from __future__ import annotations
 
 import re as _re
+import os
 import textwrap
 from pathlib import Path
 
@@ -14,14 +15,15 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from src.config import SHORTS_RESOLUTION
 
-_BOLD_FONT = r"C:\Windows\Fonts\malgunbd.ttf"
-_REG_FONT = r"C:\Windows\Fonts\malgun.ttf"
+_BOLD_FONT = os.getenv("FONT_BOLD", r"C:\Windows\Fonts\malgunbd.ttf")
+_REG_FONT = os.getenv("FONT_REG", r"C:\Windows\Fonts\malgun.ttf")
 # macOS / cross-platform Pretendard Black for the header title strip.
 _HEADER_FONT_CANDIDATES = [
     str(Path(__file__).resolve().parents[2] / "assets" / "fonts" / "Pretendard-Black.otf"),
     "/Library/Fonts/Pretendard-Black.otf",
     "/System/Library/Fonts/AppleSDGothicNeo.ttc",
     r"C:\Windows\Fonts\malgunbd.ttf",
+    "/usr/share/fonts/pretendard/Pretendard-Black.otf",  # Docker
 ]
 
 

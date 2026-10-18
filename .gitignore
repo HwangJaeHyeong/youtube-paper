@@ -66,3 +66,10 @@ desktop.ini
 
 # Project-local third-party binaries (poppler etc.)
 tools/
+
+# Docker inbox: PDFs in / videos out
+input/*.pdf
+input/finished/*
+!input/finished/.gitkeep
+output/*
+!output/.gitkeep
