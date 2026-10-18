@@ -1,9 +1,6 @@
 """Generate conversational podcast scripts from paper text.
 
-Uses the Claude Agent SDK, which authenticates via the user's Claude Code
-subscription (OAuth) by default — no ANTHROPIC_API_KEY needed for Phase 1~3.
-Set ANTHROPIC_API_KEY in .env later if you want to switch to pay-per-token
-for headless/cron deployments.
+Uses the configured Claude or Codex provider through src.llm.
 """
 from __future__ import annotations
 
@@ -12,9 +9,8 @@ import json
 import re
 from datetime import datetime, timezone
 
-from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
-
-from src.config import CLAUDE_MODEL, SCRIPTS_DIR
+from src.config import SCRIPTS_DIR
+from src.llm import generate_text
 from src.script.prompts import SYSTEM_PROMPT, user_prompt
 from src.script.validator import validate_script
 
@@ -26,18 +22,7 @@ def _strip_code_fences(s: str) -> str:
 
 
 async def _query_claude(prompt: str) -> str:
-    options = ClaudeAgentOptions(
-        system_prompt=SYSTEM_PROMPT,
-        model=CLAUDE_MODEL,
-        allowed_tools=[],
-    )
-    chunks: list[str] = []
-    async for message in query(prompt=prompt, options=options):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    chunks.append(block.text)
-    return "".join(chunks)
+    return await generate_text(SYSTEM_PROMPT, prompt)
 
 
 _ALLOWED_SECTIONS = {

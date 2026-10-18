@@ -30,7 +30,14 @@ for _d in (PAPERS_DIR, SCRIPTS_DIR, AUDIO_DIR, VIDEOS_DIR):
     _d.mkdir(parents=True, exist_ok=True)
 
 # --- LLM models ---
-CLAUDE_MODEL = "claude-sonnet-4-6"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "claude").strip().lower()
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+CLAUDE_POLISH_MODEL = os.getenv("CLAUDE_POLISH_MODEL", "claude-opus-4-7")
+# Empty uses the model configured in Codex CLI.
+CODEX_MODEL = os.getenv("CODEX_MODEL", "")
+CODEX_POLISH_MODEL = os.getenv("CODEX_POLISH_MODEL", "") or CODEX_MODEL
+CODEX_BIN = os.getenv("CODEX_BIN", "codex")
+CODEX_TIMEOUT_SECONDS = float(os.getenv("CODEX_TIMEOUT_SECONDS", "600"))
 
 # --- TTS: Gemini 2.5 (Google AI Studio) ---
 # https://ai.google.dev/gemini-api/docs/speech-generation
@@ -97,8 +104,17 @@ SHORTS_RESOLUTION = (1080, 1920)
 FPS = 30
 AUDIO_BITRATE = "192k"
 
-# --- Third-party binaries (project-local) ---
-POPPLER_BIN = PROJECT_ROOT / "tools" / "poppler-24.08.0" / "Library" / "bin"
+# --- Third-party binaries ---
+# Windows: project-local poppler bundle. macOS/Linux: rely on `pdftoppm` on PATH
+# (install via `brew install poppler` or `apt install poppler-utils`). When None,
+# pdf2image falls back to PATH lookup.
+import sys as _sys
+
+_BUNDLED_POPPLER = PROJECT_ROOT / "tools" / "poppler-24.08.0" / "Library" / "bin"
+if _sys.platform.startswith("win") and _BUNDLED_POPPLER.exists():
+    POPPLER_BIN: Path | None = _BUNDLED_POPPLER
+else:
+    POPPLER_BIN = None
 
 # --- Phase 4: YouTube upload ---
 YOUTUBE_OAUTH_CLIENT_FILE = PROJECT_ROOT / "credentials" / "youtube_oauth_client.json"

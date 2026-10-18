@@ -51,7 +51,7 @@ def _run_tts_and_merge(script: dict, slug: str) -> tuple[Path, list[Path], list[
     return merged, wavs, lines
 
 
-def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) -> Path:
+def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool, subtitle_style: str = "default", sticky_visuals: bool = False) -> Path:
     data = json.loads(script_json.read_text(encoding="utf-8"))
     line_dir = AUDIO_DIR / slug / "lines"
     wavs = sorted(line_dir.glob("*.wav"))
@@ -84,12 +84,17 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
         ref = figure_cropper.normalize_ref(line.get("visual_ref"))
         if not ref or ref in crops:
             continue
+        out_png = crops_dir / f"{ref.replace(' ', '_')}.png"
+        # Path A: pre-existing PNG (PDF-cropped before, OR external image dropped
+        # in by the user / generated for refs like "RNN", "CNN", "LLM_logos").
+        if out_png.exists():
+            crops[ref] = out_png
+            continue
+        # Path B: PDF-driven crop. Need page index from the figure_index.
         page_idx = fig_index.get(ref)
         if not page_idx:
             continue
-        out_png = crops_dir / f"{ref.replace(' ', '_')}.png"
-        if not out_png.exists():
-            figure_cropper.crop_visual(pdf, page_idx, ref, out_png)
+        figure_cropper.crop_visual(pdf, page_idx, ref, out_png)
         crops[ref] = out_png
     log.info("crops rendered: %d (%s)", len(crops), list(crops.keys()))
 
@@ -101,7 +106,7 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
     ]
 
     ass = AUDIO_DIR / slug / f"{slug}.ass"
-    subtitle.build_ass(data["script"], wavs, ass, line_is_cover=line_is_cover)
+    subtitle.build_ass(data["script"], wavs, ass, line_is_cover=line_is_cover, style=subtitle_style)
 
     cover = AUDIO_DIR / slug / "cover.png"
     title_card.render_cover(cover)
@@ -115,7 +120,7 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
         title_card.render_title_card(intro_title, tc, size=size, teaser_path=teaser if teaser.exists() else None)
         crops["__TITLE__"] = tc
     segments = composer.build_segments_v2(
-        data["script"], wavs, pages, fig_index, crops, fallback_img=cover
+        data["script"], wavs, pages, fig_index, crops, fallback_img=cover, sticky=sticky_visuals
     )
     log.info("video segments: %d (fallback=%s)", len(segments), cover.name)
 
@@ -123,7 +128,15 @@ def _generate_video(slug: str, script_json: Path, mp3: Path, is_shorts: bool) ->
     if is_shorts:
         header_png = crops_dir / "__HEADER__.png"
         title_card.render_header_strip(intro_title, header_png, width=size[0])
-        composer.compose_shorts(mp3, ass, pages, segments, out_mp4, header_png=header_png)
+        footer_png = crops_dir / "__FOOTER__.png"
+        title_card.render_footer_strip(
+            "다음 논문은 **댓글**로 추천 받아요",
+            footer_png, width=size[0],
+        )
+        composer.compose_shorts(
+            mp3, ass, pages, segments, out_mp4,
+            header_png=header_png, footer_png=footer_png,
+        )
     else:
         composer.compose_longform(mp3, ass, pages, segments, out_mp4)
     return out_mp4

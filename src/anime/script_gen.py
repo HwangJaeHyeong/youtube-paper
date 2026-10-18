@@ -1,6 +1,6 @@
 """Anime-review shorts script generator.
 
-Reuses the Claude Agent SDK + OAuth path from the paper pipeline.
+Reuses the configured Claude or Codex provider from the paper pipeline.
 Output schema mirrors `src.script.validator.Script` so downstream tooling
 (subtitle, composer, upload) works unchanged — with one addition:
 each line has an `image_prompt` used by `image_gen` to render per-scene AI art.
@@ -13,9 +13,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
-
-from src.config import CLAUDE_MODEL, SCRIPTS_DIR
+from src.config import SCRIPTS_DIR
+from src.llm import generate_text
 from src.script.shorts_generator import _parse_first_json
 
 ANIME_SHORTS_SYSTEM = """\
@@ -80,16 +79,7 @@ def _build_prompt(name: str, extra_info: str = "") -> str:
 
 
 async def _query(prompt: str) -> str:
-    options = ClaudeAgentOptions(
-        system_prompt=ANIME_SHORTS_SYSTEM, model=CLAUDE_MODEL, allowed_tools=[],
-    )
-    chunks: list[str] = []
-    async for m in query(prompt=prompt, options=options):
-        if isinstance(m, AssistantMessage):
-            for b in m.content:
-                if isinstance(b, TextBlock):
-                    chunks.append(b.text)
-    return "".join(chunks)
+    return await generate_text(ANIME_SHORTS_SYSTEM, prompt)
 
 
 def generate(name: str, slug: str, extra_info: str = "") -> dict:

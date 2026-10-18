@@ -1,6 +1,6 @@
 """Take a longform script JSON and produce a 30~60 second Shorts version.
 
-Uses Claude Agent SDK (same OAuth as longform). Output schema matches the
+Uses the configured Claude or Codex provider (same as longform). Output schema matches the
 longform validator, just with fewer lines and metadata.target_length='shorts'.
 """
 from __future__ import annotations
@@ -11,9 +11,8 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
-
-from src.config import CLAUDE_MODEL, SCRIPTS_DIR
+from src.config import SCRIPTS_DIR
+from src.llm import generate_text
 from src.script.generator import _sanitize_sections
 from src.script.validator import validate_script
 
@@ -296,18 +295,7 @@ def _build_prompt_from_paper(paper_title: str, authors: list[str], venue: str, p
 
 
 async def _query(prompt: str, lang: str = "ko") -> str:
-    options = ClaudeAgentOptions(
-        system_prompt=SHORTS_SYSTEM_EN if lang == "en" else SHORTS_SYSTEM,
-        model=CLAUDE_MODEL,
-        allowed_tools=[],
-    )
-    chunks: list[str] = []
-    async for message in query(prompt=prompt, options=options):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    chunks.append(block.text)
-    return "".join(chunks)
+    return await generate_text(SHORTS_SYSTEM_EN if lang == "en" else SHORTS_SYSTEM, prompt)
 
 
 def _strip_fences(s: str) -> str:
@@ -401,32 +389,12 @@ REFINE_SYSTEM = """\
 
 
 async def _critic_query(script_json: str, lang: str = "ko") -> str:
-    options = ClaudeAgentOptions(
-        system_prompt=CRITIC_SYSTEM_EN if lang == "en" else CRITIC_SYSTEM,
-        model=CLAUDE_MODEL, allowed_tools=[],
-    )
-    chunks: list[str] = []
-    async for m in query(prompt=script_json, options=options):
-        if isinstance(m, AssistantMessage):
-            for b in m.content:
-                if isinstance(b, TextBlock):
-                    chunks.append(b.text)
-    return "".join(chunks)
+    return await generate_text(CRITIC_SYSTEM_EN if lang == "en" else CRITIC_SYSTEM, script_json)
 
 
 async def _refine_query(script_json: str, critique_json: str, lang: str = "ko") -> str:
-    options = ClaudeAgentOptions(
-        system_prompt=REFINE_SYSTEM_EN if lang == "en" else REFINE_SYSTEM,
-        model=CLAUDE_MODEL, allowed_tools=[],
-    )
     prompt = f"[원본 대본]\n{script_json}\n\n[비평]\n{critique_json}"
-    chunks: list[str] = []
-    async for m in query(prompt=prompt, options=options):
-        if isinstance(m, AssistantMessage):
-            for b in m.content:
-                if isinstance(b, TextBlock):
-                    chunks.append(b.text)
-    return "".join(chunks)
+    return await generate_text(REFINE_SYSTEM_EN if lang == "en" else REFINE_SYSTEM, prompt)
 
 
 async def _iterate(paper_title: str, authors: list[str], venue: str, paper_text: str, rounds: int, lang: str = "ko") -> tuple[dict, list[dict]]:
@@ -486,24 +454,15 @@ POLISH_SYSTEM = """\
 
 
 async def _opus_polish(script_data: dict) -> dict:
-    """Opus 1회 검수 — 어색한 대사·Q&A 단절 등 수정."""
-    options = ClaudeAgentOptions(
-        system_prompt=POLISH_SYSTEM, model="claude-opus-4-7", allowed_tools=[],
-    )
-    chunks: list[str] = []
-    async for m in query(prompt=json.dumps(script_data, ensure_ascii=False), options=options):
-        if isinstance(m, AssistantMessage):
-            for b in m.content:
-                if isinstance(b, TextBlock):
-                    chunks.append(b.text)
-    raw = "".join(chunks)
+    """Configured provider final review of dialogue and Q&A flow."""
+    raw = await generate_text(POLISH_SYSTEM, json.dumps(script_data, ensure_ascii=False), polish=True)
     try:
         result = _parse_first_json(raw)
         if "script" in result and isinstance(result["script"], list):
-            print(f"  [opus polish] fixes: {result.get('fixes', [])}", flush=True)
+            print(f"  [polish] fixes: {result.get('fixes', [])}", flush=True)
             script_data["script"] = result["script"]
     except Exception as e:
-        print(f"  [opus polish] failed, keeping original: {e}", flush=True)
+        print(f"  [polish] failed, keeping original: {e}", flush=True)
     return script_data
 
 
@@ -513,7 +472,7 @@ def generate_from_paper_iterative(
     """N rounds of self-critique + refine + 1 Opus polish. Saves history."""
     final, history = asyncio.run(_iterate(paper_title, authors, venue, paper_text, rounds, lang=lang))
     if lang == "ko":
-        print("  [opus polish] reviewing for awkward dialogue...", flush=True)
+        print("  [polish] reviewing for awkward dialogue...", flush=True)
         final = asyncio.run(_opus_polish(final))
     # Save history for inspection
     hist_path = SCRIPTS_DIR / f"{slug}-shorts.history.json"
