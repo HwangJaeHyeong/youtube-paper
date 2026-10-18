@@ -102,5 +102,5 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         text = " ".join(t["text"] for t in group)
         effect = r"{\pos(540,1380)\fad(20,0)\fscx95\fscy95\t(0,60,\fscx100\fscy100)}"
         events.append(f"Dialogue: 0,{stamp(start)},{stamp(max(start+0.04,end))},Speech,,0,0,0,,{effect}{text}")
-    out.write_text(header+"\n".join(events)+"\n")
+    out.write_text(header+"\n".join(events)+"\n", encoding="utf-8")
     return len(groups)

@@ -63,7 +63,7 @@ def main():
     ass = ROOT / "captions.ass"
     sync.build_subtitles(words, ass)
     s = (
-        ass.read_text()
+        ass.read_text(encoding="utf-8")
         .replace("Pretendard Black,78,", f"Pretendard Black,{layout.get('caption_font_size', 88)},")
         .replace(r"\pos(540,1380)", r"\pos(540," + str(layout.get("caption_y", 1320)) + ")")
         .replace(
@@ -120,7 +120,8 @@ def main():
             {"duration": duration, "similarity": similarity, "shots": shots},
             ensure_ascii=False,
             indent=2,
-        )
+        ),
+        encoding="utf-8",
     )
     header = crops / "__HEADER__.png"
     footer = crops / "__FOOTER__.png"
