@@ -18,8 +18,8 @@ _BOLD_FONT = r"C:\Windows\Fonts\malgunbd.ttf"
 _REG_FONT = r"C:\Windows\Fonts\malgun.ttf"
 # macOS / cross-platform Pretendard Black for the header title strip.
 _HEADER_FONT_CANDIDATES = [
+    str(Path(__file__).resolve().parents[2] / "assets" / "fonts" / "Pretendard-Black.otf"),
     "/Library/Fonts/Pretendard-Black.otf",
-    "/Users/jaehyeong/Library/Fonts/Pretendard-Black.otf",
     "/System/Library/Fonts/AppleSDGothicNeo.ttc",
     r"C:\Windows\Fonts\malgunbd.ttf",
 ]

@@ -1,0 +1,512 @@
+[
+  {
+    "text": "잠깐.",
+    "line": 0,
+    "start": 0.1,
+    "end": 0.8
+  },
+  {
+    "text": "이거",
+    "line": 0,
+    "start": 0.8,
+    "end": 1.2
+  },
+  {
+    "text": "컨트롤러예요,",
+    "line": 0,
+    "start": 1.2,
+    "end": 2.1
+  },
+  {
+    "text": "블록",
+    "line": 0,
+    "start": 2.1,
+    "end": 2.3
+  },
+  {
+    "text": "장난감이에요?",
+    "line": 0,
+    "start": 2.3,
+    "end": 3.0
+  },
+  {
+    "text": "게임에서",
+    "line": 1,
+    "start": 3.4,
+    "end": 3.8
+  },
+  {
+    "text": "불을",
+    "line": 1,
+    "start": 3.8,
+    "end": 4.0
+  },
+  {
+    "text": "뿜으면,",
+    "line": 1,
+    "start": 4.0,
+    "end": 4.5
+  },
+  {
+    "text": "손에서도",
+    "line": 1,
+    "start": 4.6,
+    "end": 5.2
+  },
+  {
+    "text": "열이",
+    "line": 1,
+    "start": 5.2,
+    "end": 5.4
+  },
+  {
+    "text": "느껴집니다.",
+    "line": 1,
+    "start": 5.4,
+    "end": 5.9
+  },
+  {
+    "text": "보통은",
+    "line": 2,
+    "start": 6.5,
+    "end": 6.9
+  },
+  {
+    "text": "총을",
+    "line": 2,
+    "start": 6.9,
+    "end": 7.2
+  },
+  {
+    "text": "들어도",
+    "line": 2,
+    "start": 7.2,
+    "end": 7.5
+  },
+  {
+    "text": "컵을",
+    "line": 2,
+    "start": 7.5,
+    "end": 7.8
+  },
+  {
+    "text": "들어도,",
+    "line": 2,
+    "start": 7.8,
+    "end": 8.2
+  },
+  {
+    "text": "똑같은",
+    "line": 2,
+    "start": 8.2,
+    "end": 8.5
+  },
+  {
+    "text": "손잡이만",
+    "line": 2,
+    "start": 8.5,
+    "end": 9.0
+  },
+  {
+    "text": "쥐잖아요.",
+    "line": 2,
+    "start": 9.0,
+    "end": 9.4
+  },
+  {
+    "text": "HaptiCraft는",
+    "line": 3,
+    "start": 9.8,
+    "end": 10.6
+  },
+  {
+    "text": "달라요.",
+    "line": 3,
+    "start": 10.6,
+    "end": 11.0
+  },
+  {
+    "text": "필요한",
+    "line": 3,
+    "start": 11.4,
+    "end": 11.7
+  },
+  {
+    "text": "블록을",
+    "line": 3,
+    "start": 11.7,
+    "end": 12.0
+  },
+  {
+    "text": "붙여서,",
+    "line": 3,
+    "start": 12.0,
+    "end": 12.6
+  },
+  {
+    "text": "모양도",
+    "line": 3,
+    "start": 12.6,
+    "end": 13.1
+  },
+  {
+    "text": "촉감도",
+    "line": 3,
+    "start": 13.1,
+    "end": 13.6
+  },
+  {
+    "text": "직접",
+    "line": 3,
+    "start": 13.6,
+    "end": 13.9
+  },
+  {
+    "text": "만듭니다.",
+    "line": 3,
+    "start": 13.9,
+    "end": 14.4
+  },
+  {
+    "text": "덜덜",
+    "line": 4,
+    "start": 14.9,
+    "end": 15.2
+  },
+  {
+    "text": "떨리고,",
+    "line": 4,
+    "start": 15.2,
+    "end": 15.7
+  },
+  {
+    "text": "탁",
+    "line": 4,
+    "start": 15.7,
+    "end": 16.0
+  },
+  {
+    "text": "치고,",
+    "line": 4,
+    "start": 16.0,
+    "end": 16.3
+  },
+  {
+    "text": "뜨겁고",
+    "line": 4,
+    "start": 16.3,
+    "end": 16.7
+  },
+  {
+    "text": "차갑고.",
+    "line": 4,
+    "start": 16.7,
+    "end": 17.2
+  },
+  {
+    "text": "휘두르는",
+    "line": 4,
+    "start": 17.5,
+    "end": 18.0
+  },
+  {
+    "text": "느낌에,",
+    "line": 4,
+    "start": 18.0,
+    "end": 18.4
+  },
+  {
+    "text": "누르는",
+    "line": 4,
+    "start": 18.4,
+    "end": 18.7
+  },
+  {
+    "text": "단단함까지.",
+    "line": 4,
+    "start": 18.7,
+    "end": 19.5
+  },
+  {
+    "text": "안에",
+    "line": 5,
+    "start": 20.0,
+    "end": 20.2
+  },
+  {
+    "text": "있는",
+    "line": 5,
+    "start": 20.2,
+    "end": 20.4
+  },
+  {
+    "text": "추까지",
+    "line": 5,
+    "start": 20.4,
+    "end": 20.8
+  },
+  {
+    "text": "움직여요.",
+    "line": 5,
+    "start": 20.8,
+    "end": 21.3
+  },
+  {
+    "text": "같은",
+    "line": 5,
+    "start": 21.5,
+    "end": 21.8
+  },
+  {
+    "text": "장치인데,",
+    "line": 5,
+    "start": 21.8,
+    "end": 22.3
+  },
+  {
+    "text": "더",
+    "line": 5,
+    "start": 22.3,
+    "end": 22.5
+  },
+  {
+    "text": "긴",
+    "line": 5,
+    "start": 22.5,
+    "end": 22.8
+  },
+  {
+    "text": "물체를",
+    "line": 5,
+    "start": 22.8,
+    "end": 23.2
+  },
+  {
+    "text": "휘두르는",
+    "line": 5,
+    "start": 23.2,
+    "end": 23.6
+  },
+  {
+    "text": "느낌을",
+    "line": 5,
+    "start": 23.6,
+    "end": 23.9
+  },
+  {
+    "text": "주는",
+    "line": 5,
+    "start": 23.9,
+    "end": 24.1
+  },
+  {
+    "text": "거죠.",
+    "line": 5,
+    "start": 24.1,
+    "end": 24.4
+  },
+  {
+    "text": "18명이",
+    "line": 6,
+    "start": 24.9,
+    "end": 25.6
+  },
+  {
+    "text": "7가지",
+    "line": 6,
+    "start": 25.6,
+    "end": 26.0
+  },
+  {
+    "text": "상황에서",
+    "line": 6,
+    "start": 26.0,
+    "end": 26.4
+  },
+  {
+    "text": "써봤고요.",
+    "line": 6,
+    "start": 26.4,
+    "end": 26.9
+  },
+  {
+    "text": "기존",
+    "line": 6,
+    "start": 27.1,
+    "end": 27.4
+  },
+  {
+    "text": "컨트롤러보다",
+    "line": 6,
+    "start": 27.4,
+    "end": 28.0
+  },
+  {
+    "text": "대체로",
+    "line": 6,
+    "start": 28.0,
+    "end": 28.4
+  },
+  {
+    "text": "좋은",
+    "line": 6,
+    "start": 28.4,
+    "end": 28.7
+  },
+  {
+    "text": "평가를",
+    "line": 6,
+    "start": 28.7,
+    "end": 29.0
+  },
+  {
+    "text": "받았습니다.",
+    "line": 6,
+    "start": 29.0,
+    "end": 29.5
+  },
+  {
+    "text": "근데",
+    "line": 7,
+    "start": 30.1,
+    "end": 30.3
+  },
+  {
+    "text": "잠깐.",
+    "line": 7,
+    "start": 30.3,
+    "end": 30.8
+  },
+  {
+    "text": "붙일수록",
+    "line": 7,
+    "start": 31.1,
+    "end": 31.7
+  },
+  {
+    "text": "무거워집니다.",
+    "line": 7,
+    "start": 31.7,
+    "end": 32.5
+  },
+  {
+    "text": "실제로",
+    "line": 7,
+    "start": 32.7,
+    "end": 33.1
+  },
+  {
+    "text": "무겁고,",
+    "line": 7,
+    "start": 33.1,
+    "end": 33.5
+  },
+  {
+    "text": "잡기",
+    "line": 7,
+    "start": 33.5,
+    "end": 33.8
+  },
+  {
+    "text": "불편하다는",
+    "line": 7,
+    "start": 33.8,
+    "end": 34.4
+  },
+  {
+    "text": "얘기도",
+    "line": 7,
+    "start": 34.4,
+    "end": 34.6
+  },
+  {
+    "text": "나왔어요.",
+    "line": 7,
+    "start": 34.6,
+    "end": 35.0
+  },
+  {
+    "text": "POSTECH과",
+    "line": 8,
+    "start": 35.7,
+    "end": 36.2
+  },
+  {
+    "text": "KOREATECH",
+    "line": 8,
+    "start": 36.2,
+    "end": 36.6
+  },
+  {
+    "text": "연구팀이",
+    "line": 8,
+    "start": 36.6,
+    "end": 37.0
+  },
+  {
+    "text": "발표한,",
+    "line": 8,
+    "start": 37.0,
+    "end": 37.5
+  },
+  {
+    "text": "2026년",
+    "line": 8,
+    "start": 37.6,
+    "end": 38.4
+  },
+  {
+    "text": "IEEE",
+    "line": 8,
+    "start": 38.5,
+    "end": 39.0
+  },
+  {
+    "text": "TVCG",
+    "line": 8,
+    "start": 39.0,
+    "end": 39.6
+  },
+  {
+    "text": "논문입니다.",
+    "line": 8,
+    "start": 39.6,
+    "end": 40.0
+  },
+  {
+    "text": "자,",
+    "line": 9,
+    "start": 40.7,
+    "end": 40.9
+  },
+  {
+    "text": "이걸로",
+    "line": 9,
+    "start": 41.0,
+    "end": 41.3
+  },
+  {
+    "text": "컵부터",
+    "line": 9,
+    "start": 41.3,
+    "end": 41.8
+  },
+  {
+    "text": "만드시겠어요?",
+    "line": 9,
+    "start": 41.8,
+    "end": 42.5
+  },
+  {
+    "text": "아니면,",
+    "line": 9,
+    "start": 42.7,
+    "end": 43.0
+  },
+  {
+    "text": "화염방사기?",
+    "line": 9,
+    "start": 43.0,
+    "end": 43.7
+  }
+]

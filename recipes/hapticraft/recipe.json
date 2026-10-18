@@ -1,0 +1,460 @@
+{
+  "schema_version": 1,
+  "slug": "hapticraft-standard-shorts",
+  "title_hook": "VR 컨트롤러를 **조립**한다고?\n(**POSTECH + KOREATECH** HaptiCraft)",
+  "paper": {
+    "title": "HaptiCraft: A Modular Multimodal Haptic Controller for Immersive Virtual Reality Interactions",
+    "doi": "10.1109/TVCG.2026.3683951",
+    "official_url": "https://doi.org/10.1109/TVCG.2026.3683951",
+    "download_url": "https://ieeexplore.ieee.org/stampPDF/getPDF.jsp?tp=&arnumber=11481658&ref=",
+    "expected_pages": 14
+  },
+  "voice": {
+    "provider": "gemini",
+    "model": "gemini-2.5-flash-preview-tts",
+    "name": "Puck",
+    "speed": 1.2,
+    "direction": "You are a native Korean male tech creator in his late twenties, telling a friend about a surprising paper. Speak fluent contemporary Seoul Korean. Warm, textured, engaged, slightly mischievous, with natural pitch variation and clear consonants. Brisk conversation with short meaningful pauses, not rushed. Never use a flat newsreader cadence, a commercial announcer voice, or exaggerated shouting. Open with an amused double take. A tiny pause after 잠깐. Ask the two alternatives playfully, with real curiosity. Maintain ONE consistent male speaker identity, pitch range, timbre, vocal age and recording tone from the first sentence to the very end. This is one continuous monologue. Read ONLY the following Korean text verbatim, without reading instructions or adding words."
+  },
+  "script": [
+    {
+      "section": "intro",
+      "speaker": "민재",
+      "text": "잠깐. 이거 컨트롤러예요, 블록 장난감이에요?"
+    },
+    {
+      "section": "intro",
+      "speaker": "민재",
+      "text": "게임에서 불을 뿜으면, 손에서도 열이 느껴집니다."
+    },
+    {
+      "section": "background",
+      "speaker": "민재",
+      "text": "보통은 총을 들어도 컵을 들어도, 똑같은 손잡이만 쥐잖아요."
+    },
+    {
+      "section": "method",
+      "speaker": "민재",
+      "text": "HaptiCraft는 달라요. 필요한 블록을 붙여서, 모양도 촉감도 직접 만듭니다."
+    },
+    {
+      "section": "method",
+      "speaker": "민재",
+      "text": "덜덜 떨리고, 탁 치고, 뜨겁고 차갑고. 휘두르는 느낌에, 누르는 단단함까지."
+    },
+    {
+      "section": "method",
+      "speaker": "민재",
+      "text": "안에 있는 추까지 움직여요. 같은 장치인데, 더 긴 물체를 휘두르는 느낌을 주는 거죠."
+    },
+    {
+      "section": "results",
+      "speaker": "민재",
+      "text": "18명이 7가지 상황에서 써봤고요. 기존 컨트롤러보다 대체로 좋은 평가를 받았습니다."
+    },
+    {
+      "section": "limitations",
+      "speaker": "민재",
+      "text": "근데 잠깐. 붙일수록 무거워집니다. 실제로 무겁고, 잡기 불편하다는 얘기도 나왔어요."
+    },
+    {
+      "section": "outro",
+      "speaker": "민재",
+      "text": "POSTECH과 KOREATECH 연구팀이 발표한, 2026년 IEEE TVCG 논문입니다."
+    },
+    {
+      "section": "outro",
+      "speaker": "민재",
+      "text": "자, 이걸로 컵부터 만드시겠어요? 아니면, 화염방사기?"
+    }
+  ],
+  "reference": {
+    "audio": "reference/narration-1.2x.wav",
+    "audio_sha256": "947b191e5eef2f381813df8f3b4130e1f2689270b58eef92657aad38234b57a9",
+    "words": "reference/words.json",
+    "script_sha256": "dcd920ce136dc36507567735ea7cf408a38e26c1787fd700602b26cfc25f65cb"
+  },
+  "figures": {
+    "1": {
+      "page": 2,
+      "image_index": 0
+    },
+    "3": {
+      "page": 4,
+      "image_index": 0
+    },
+    "9": {
+      "page": 7,
+      "image_index": 1
+    },
+    "13": {
+      "page": 9,
+      "image_index": 0
+    },
+    "15": {
+      "page": 10,
+      "image_index": 0
+    },
+    "16": {
+      "page": 11,
+      "image_index": 0
+    }
+  },
+  "panels": {
+    "modules": {
+      "figure": 1,
+      "rect": [
+        0.001,
+        0.001,
+        0.998,
+        0.608
+      ]
+    },
+    "gun_user": {
+      "figure": 1,
+      "rect": [
+        0.001,
+        0.624,
+        0.32,
+        0.955
+      ]
+    },
+    "cup_user": {
+      "figure": 1,
+      "rect": [
+        0.677,
+        0.624,
+        0.998,
+        0.955
+      ]
+    },
+    "wheel_user": {
+      "figure": 1,
+      "rect": [
+        0.338,
+        0.624,
+        0.662,
+        0.955
+      ]
+    },
+    "shape": {
+      "figure": 3,
+      "rect": [
+        0,
+        0,
+        0.3333333333333333,
+        0.5
+      ]
+    },
+    "vibration": {
+      "figure": 3,
+      "rect": [
+        0.3333333333333333,
+        0,
+        0.6666666666666666,
+        0.5
+      ]
+    },
+    "impact": {
+      "figure": 3,
+      "rect": [
+        0.6666666666666666,
+        0,
+        1,
+        0.5
+      ]
+    },
+    "thermal": {
+      "figure": 3,
+      "rect": [
+        0,
+        0.5,
+        0.3333333333333333,
+        1
+      ]
+    },
+    "inertia": {
+      "figure": 3,
+      "rect": [
+        0.576,
+        0.514,
+        0.663,
+        0.909
+      ]
+    },
+    "inertia_design": {
+      "figure": 3,
+      "rect": [
+        0.336,
+        0.512,
+        0.665,
+        0.921
+      ]
+    },
+    "moving_mass": {
+      "figure": 3,
+      "rect": [
+        0.336,
+        0.512,
+        0.575,
+        0.921
+      ]
+    },
+    "stiffness": {
+      "figure": 3,
+      "rect": [
+        0.6666666666666666,
+        0.5,
+        1,
+        1
+      ]
+    },
+    "authoring": {
+      "figure": 9,
+      "rect": [
+        0.0,
+        0.0,
+        1.0,
+        1.0
+      ]
+    },
+    "custom_gun": {
+      "figure": 13,
+      "rect": [
+        0.404,
+        0.004,
+        0.596,
+        0.495
+      ]
+    },
+    "custom_cup": {
+      "figure": 13,
+      "rect": [
+        0.405,
+        0.508,
+        0.596,
+        0.943
+      ]
+    },
+    "gun": {
+      "figure": 15,
+      "rect": [
+        0.002,
+        0.002,
+        0.247,
+        0.455
+      ]
+    },
+    "flame": {
+      "figure": 15,
+      "rect": [
+        0.253,
+        0.002,
+        0.497,
+        0.455
+      ]
+    },
+    "cup": {
+      "figure": 15,
+      "rect": [
+        0.002,
+        0.471,
+        0.247,
+        0.92
+      ]
+    },
+    "commercial": {
+      "figure": 15,
+      "rect": [
+        0.754,
+        0.471,
+        0.997,
+        0.92
+      ]
+    },
+    "all_results": {
+      "figure": 16,
+      "rect": [
+        0.754,
+        0.487,
+        0.998,
+        0.954
+      ]
+    },
+    "flame_results": {
+      "figure": 16,
+      "rect": [
+        0.255,
+        0.0,
+        0.495,
+        0.463
+      ]
+    }
+  },
+  "shots": [
+    {
+      "line": 0,
+      "cue": "line start",
+      "panels": [
+        "modules"
+      ]
+    },
+    {
+      "line": 0,
+      "cue": "블록",
+      "panels": [
+        "gun_user"
+      ]
+    },
+    {
+      "line": 1,
+      "cue": "line start",
+      "panels": [
+        "flame"
+      ]
+    },
+    {
+      "line": 1,
+      "cue": "손에서도",
+      "panels": [
+        "thermal"
+      ]
+    },
+    {
+      "line": 2,
+      "cue": "line start",
+      "panels": [
+        "commercial"
+      ]
+    },
+    {
+      "line": 3,
+      "cue": "line start",
+      "panels": [
+        "custom_gun",
+        "custom_cup"
+      ]
+    },
+    {
+      "line": 3,
+      "cue": "모양도",
+      "panels": [
+        "authoring"
+      ]
+    },
+    {
+      "line": 4,
+      "cue": "line start",
+      "panels": [
+        "vibration"
+      ]
+    },
+    {
+      "line": 4,
+      "cue": "탁",
+      "panels": [
+        "impact"
+      ]
+    },
+    {
+      "line": 4,
+      "cue": "뜨겁고",
+      "panels": [
+        "thermal"
+      ]
+    },
+    {
+      "line": 4,
+      "cue": "휘두르는",
+      "panels": [
+        "inertia"
+      ]
+    },
+    {
+      "line": 4,
+      "cue": "누르는",
+      "panels": [
+        "stiffness"
+      ]
+    },
+    {
+      "line": 5,
+      "cue": "line start",
+      "panels": [
+        "inertia_design"
+      ]
+    },
+    {
+      "line": 5,
+      "cue": "같은",
+      "panels": [
+        "moving_mass",
+        "inertia"
+      ]
+    },
+    {
+      "line": 6,
+      "cue": "line start",
+      "panels": [
+        "gun",
+        "cup"
+      ]
+    },
+    {
+      "line": 6,
+      "cue": "기존",
+      "panels": [
+        "all_results"
+      ]
+    },
+    {
+      "line": 7,
+      "cue": "line start",
+      "panels": [
+        "custom_gun"
+      ]
+    },
+    {
+      "line": 7,
+      "cue": "잡기",
+      "panels": [
+        "shape",
+        "gun_user"
+      ]
+    },
+    {
+      "line": 8,
+      "cue": "line start",
+      "panels": [
+        "modules"
+      ]
+    },
+    {
+      "line": 9,
+      "cue": "line start",
+      "panels": [
+        "cup_user"
+      ]
+    },
+    {
+      "line": 9,
+      "cue": "아니면",
+      "panels": [
+        "flame"
+      ]
+    }
+  ],
+  "layout": {
+    "font": "../../assets/fonts/Pretendard-Black.otf",
+    "font_name": "Pretendard Black",
+    "subtitle_y": 1320,
+    "footer": "다음 논문은 **댓글**로 추천 받아요",
+    "art_bounds": [
+      0,
+      500,
+      1080,
+      1250
+    ]
+  },
+  "published_url": "https://www.youtube.com/shorts/vcRK_zeecjE"
+}

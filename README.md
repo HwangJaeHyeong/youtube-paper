@@ -78,3 +78,12 @@ src/
 
 상세 설계·프롬프트 원칙·운영 패턴은 [DEVELOPMENT_LOG.md](DEVELOPMENT_LOG.md) 참조.
 초기 기획서/철학은 [CLAUDE.md](CLAUDE.md) 참조.
+
+## HaptiCraft 공개본 재현
+
+다른 컴퓨터에서 최종 음성·원문 Figure·타이밍을 그대로 재현하려면
+[실행 방법](docs/hapticraft.md)을 따르세요. 원문 PDF를 지정하면 API 키 없이 빌드합니다.
+
+```bash
+python scripts/rebuild_hapticraft.py --pdf "/path/to/HaptiCraft.pdf"
+```

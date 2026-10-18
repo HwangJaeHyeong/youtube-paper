@@ -78,6 +78,7 @@ def _compose(
     height: int,
     header_png: Path | None = None,
     footer_png: Path | None = None,
+    font_dir: Path | None = None,
 ) -> Path:
     """filter_complex-based concat: one input per segment, scaled+padded, concatenated.
 
@@ -159,7 +160,8 @@ def _compose(
         # YT Shorts description/avatar bar (which begins ~y=1600 on a 1920 frame).
         parts.append(f"[{cur_label}][{idx}:v]overlay=x=(W-w)/2:y=1560-h[vf]")
         cur_label = "vf"
-    parts.append(f"[{cur_label}]subtitles='{_escape_filter_path(ass_file)}'[vout]")
+    font_option = f":fontsdir='{_escape_filter_path(font_dir)}'" if font_dir else ""
+    parts.append(f"[{cur_label}]subtitles='{_escape_filter_path(ass_file)}'{font_option}[vout]")
 
     filter_graph = ";".join(parts)
 
@@ -188,10 +190,11 @@ def compose_shorts(
     out_mp4: Path,
     header_png: Path | None = None,
     footer_png: Path | None = None,
+    font_dir: Path | None = None,
 ) -> Path:
     w, h = SHORTS_RESOLUTION
     return _compose(audio_mp3, ass_file, segments, out_mp4, w, h,
-                    header_png=header_png, footer_png=footer_png)
+                    header_png=header_png, footer_png=footer_png, font_dir=font_dir)
 
 
 def compose_longform(

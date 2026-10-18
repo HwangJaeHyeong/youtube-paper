@@ -51,6 +51,9 @@ data/run_logs/
 *.webm
 *.srt
 
+# Small, intentional reference audio for reproducible HaptiCraft builds.
+!recipes/hapticraft/reference/narration-1.2x.wav
+
 # OS
 .DS_Store
 Thumbs.db
