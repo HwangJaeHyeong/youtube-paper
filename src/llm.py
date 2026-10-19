@@ -8,15 +8,19 @@ from pathlib import Path
 from src import config
 
 
-async def generate_text(system_prompt: str, prompt: str, *, polish: bool = False) -> str:
+async def generate_text(system_prompt: str, prompt: str, *, polish: bool = False,
+                        images: list[Path] | None = None) -> str:
+    """images: PNG/JPG files the model must look at (Claude reads them with its Read tool)."""
     provider = config.LLM_PROVIDER
     if provider == "claude":
         from claude_agent_sdk import AssistantMessage, ClaudeAgentOptions, TextBlock, query
 
+        if images:
+            prompt += "\n\n[이미지 파일 — Read 도구로 하나씩 모두 열어 볼 것]\n" + "\n".join(str(p.resolve()) for p in images)
         options = ClaudeAgentOptions(
             system_prompt=system_prompt,
             model=config.CLAUDE_POLISH_MODEL if polish else config.CLAUDE_MODEL,
-            allowed_tools=[],
+            allowed_tools=["Read"] if images else [],
         )
         chunks = []
         async for message in query(prompt=prompt, options=options):
@@ -24,7 +28,7 @@ async def generate_text(system_prompt: str, prompt: str, *, polish: bool = False
                 chunks.extend(b.text for b in message.content if isinstance(b, TextBlock))
         result = "".join(chunks)
     elif provider == "codex":
-        result = await _codex(system_prompt, prompt, polish=polish)
+        result = await _codex(system_prompt, prompt, polish=polish, images=images)
     else:
         raise ValueError(f"Unknown LLM_PROVIDER {provider!r}; choose claude or codex")
     if not result.strip():
@@ -32,7 +36,7 @@ async def generate_text(system_prompt: str, prompt: str, *, polish: bool = False
     return result
 
 
-async def _codex(system_prompt: str, prompt: str, *, polish: bool) -> str:
+async def _codex(system_prompt: str, prompt: str, *, polish: bool, images: list[Path] | None = None) -> str:
     # Isolated working directory avoids loading repository instructions into a
     # writing task. Send long paper text through stdin, never shell arguments.
     with tempfile.TemporaryDirectory(prefix="papercast-codex-") as directory:
@@ -45,6 +49,8 @@ async def _codex(system_prompt: str, prompt: str, *, polish: bool) -> str:
         model = config.CODEX_POLISH_MODEL if polish else config.CODEX_MODEL
         if model:
             command.extend(["--model", model])
+        for image in images or []:
+            command.extend(["--image", str(image.resolve())])
         command.append("-")
         try:
             process = await asyncio.create_subprocess_exec(

@@ -69,10 +69,14 @@ tools/
 
 # Docker inbox: PDFs in / videos out
 input/*.pdf
-input/finished/*
+input/*/*
 !input/finished/.gitkeep
 output/*
 !output/.gitkeep
 # Frozen inputs for portable paper recipes.
 !recipes/*/reference/narration-1.2x.wav
 !recipes/*/reference/intro-demo.mp4
+
+
+# Third-party images used by the shortform template: keep them local
+templates/shortform/outro.*

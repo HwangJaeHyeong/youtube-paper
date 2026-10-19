@@ -1,0 +1,43 @@
+{
+  "background": "background.png",
+  "title": {
+    "y": 300,
+    "font_size": 64,
+    "color": [
+      58,
+      42,
+      28
+    ]
+  },
+  "caption": {
+    "mode": "step",
+    "line_chars": 10,
+    "font_name": "Dancing Peoples",
+    "font_size": 64,
+    "y": 560,
+    "color": "&H001C2A3A",
+    "outline": 0,
+    "line_spacing": 1.25
+  },
+  "figure_box": [
+    40,
+    690,
+    1040,
+    1530
+  ],
+  "font": "font.ttf",
+  "bgm": {
+    "file": "bgm.mp3",
+    "title": "Losing Your Marbles - The Soundlings (YouTube Audio Library)",
+    "db": -12
+  },
+  "sfx": {
+    "dir": "sfx"
+  },
+  "illust_zoom": 0.05,
+  "mix_db": -6,
+  "outro": {
+    "image": "outro.jpeg",
+    "text": "다음 논문은 댓글로 추천받는다"
+  }
+}

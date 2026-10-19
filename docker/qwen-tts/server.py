@@ -24,13 +24,25 @@ try:
 except ImportError:
     ATTN = "sdpa"
 
-MODEL = Qwen3TTSModel.from_pretrained(
-    os.getenv("QWEN_TTS_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
-    device_map="cuda:0",
-    dtype=torch.bfloat16,
-    attn_implementation=ATTN,
-)
-print(f"ready on {torch.cuda.get_device_name(0)} (attn={ATTN})", flush=True)
+_model = None
+
+
+def model():
+    """Loaded on the first /tts call, not at startup: the pipeline makes its images first and
+    stops the image server, so the two models never share the 16GB Docker VM."""
+    global _model
+    if _model is None:
+        _model = Qwen3TTSModel.from_pretrained(
+            os.getenv("QWEN_TTS_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-Base"),
+            device_map="cuda:0",
+            dtype=torch.bfloat16,
+            attn_implementation=ATTN,
+        )
+        print(f"model loaded on {torch.cuda.get_device_name(0)} (attn={ATTN})", flush=True)
+    return _model
+
+
+print("ready (model loads on first request)", flush=True)
 
 _prompts = {}  # (ref audio + transcript) hash -> clone prompt, built once per voice
 
@@ -43,7 +55,7 @@ def clone_prompt(req):
             f.write(raw)
             f.flush()
             audio, sr = librosa.load(f.name, sr=None, mono=True)  # handles mp3/wav/m4a
-        _prompts[key] = MODEL.create_voice_clone_prompt(ref_audio=(audio, sr), ref_text=req["ref_text"])
+        _prompts[key] = model().create_voice_clone_prompt(ref_audio=(audio, sr), ref_text=req["ref_text"])
     return _prompts[key]
 
 
@@ -67,11 +79,19 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(404)
         try:
             req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-            wavs, sr = MODEL.generate_voice_clone(
-                text=req["text"], language=req.get("language", "Korean"), voice_clone_prompt=clone_prompt(req)
+            # The model sometimes never emits its stop token and keeps "talking" for minutes.
+            # Cap the length: 12 codec tokens/s, ~10 Korean chars/s spoken, 2x headroom + 3s.
+            longest = max(len(t) for t in req["text"])
+            wavs, sr = model().generate_voice_clone(
+                text=req["text"], language=req.get("language", "Korean"), voice_clone_prompt=clone_prompt(req),
+                max_new_tokens=int(12 * (longest / 5 + 3)),
             )
             body, code = json.dumps({"wavs": [wav_b64(w, sr) for w in wavs]}).encode(), 200
         except Exception as e:  # report to client instead of dropping the connection
+            try:
+                torch.cuda.empty_cache()  # free the failed batch so the client's smaller retry fits
+            except Exception:  # CUDA context itself is broken; still answer the client
+                pass
             body, code = json.dumps({"error": f"{type(e).__name__}: {e}"}).encode(), 500
         self.send_response(code)
         self.send_header("Content-Type", "application/json")

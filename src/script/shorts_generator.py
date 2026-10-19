@@ -294,8 +294,8 @@ def _build_prompt_from_paper(paper_title: str, authors: list[str], venue: str, p
     )
 
 
-async def _query(prompt: str, lang: str = "ko") -> str:
-    return await generate_text(SHORTS_SYSTEM_EN if lang == "en" else SHORTS_SYSTEM, prompt)
+async def _query(prompt: str, lang: str = "ko", system: str | None = None) -> str:
+    return await generate_text(system or (SHORTS_SYSTEM_EN if lang == "en" else SHORTS_SYSTEM), prompt)
 
 
 def _strip_fences(s: str) -> str:
@@ -388,8 +388,8 @@ REFINE_SYSTEM = """\
 """
 
 
-async def _critic_query(script_json: str, lang: str = "ko") -> str:
-    return await generate_text(CRITIC_SYSTEM_EN if lang == "en" else CRITIC_SYSTEM, script_json)
+async def _critic_query(script_json: str, lang: str = "ko", system: str | None = None) -> str:
+    return await generate_text(system or (CRITIC_SYSTEM_EN if lang == "en" else CRITIC_SYSTEM), script_json)
 
 
 async def _refine_query(script_json: str, critique_json: str, lang: str = "ko") -> str:
@@ -397,24 +397,24 @@ async def _refine_query(script_json: str, critique_json: str, lang: str = "ko") 
     return await generate_text(REFINE_SYSTEM_EN if lang == "en" else REFINE_SYSTEM, prompt)
 
 
-async def _iterate(paper_title: str, authors: list[str], venue: str, paper_text: str, rounds: int, lang: str = "ko") -> tuple[dict, list[dict]]:
+async def _iterate(paper_title: str, authors: list[str], venue: str, paper_text: str, rounds: int, lang: str = "ko", systems: dict | None = None) -> tuple[dict, list[dict]]:
     """Return (final_data, history). history is [{"round":i, "total":n, "data":...}]."""
     print(f"  [round 0] initial draft...", flush=True)
-    raw = await _query(_build_prompt_from_paper(paper_title, authors, venue, paper_text, lang=lang), lang=lang)
+    raw = await _query(_build_prompt_from_paper(paper_title, authors, venue, paper_text, lang=lang), lang=lang, system=(systems or {}).get("draft"))
     current = _parse_first_json(raw)
     history: list[dict] = [{"round": 0, "total": None, "data": current}]
     best = current
     best_score = -1
     for i in range(1, rounds + 1):
         print(f"  [round {i}/{rounds}] critique...", flush=True)
-        critique_raw = await _critic_query(json.dumps(current, ensure_ascii=False), lang=lang)
+        critique_raw = await _critic_query(json.dumps(current, ensure_ascii=False), lang=lang, system=(systems or {}).get("critic"))
         try:
             critique = _parse_first_json(critique_raw)
             total = int(critique.get("total", 0))
         except Exception:
             critique = {"critical_issues": ["파싱 실패, 재작성 요망"], "specific_fixes": []}
             total = 0
-        print(f"  [round {i}/{rounds}] score={total}/140, refining...", flush=True)
+        print(f"  [round {i}/{rounds}] score={total}, refining...", flush=True)
         refined_raw = await _refine_query(json.dumps(current, ensure_ascii=False), json.dumps(critique, ensure_ascii=False), lang=lang)
         try:
             current = _parse_first_json(refined_raw)
@@ -453,9 +453,9 @@ POLISH_SYSTEM = """\
 """
 
 
-async def _opus_polish(script_data: dict) -> dict:
+async def _opus_polish(script_data: dict, system: str | None = None) -> dict:
     """Configured provider final review of dialogue and Q&A flow."""
-    raw = await generate_text(POLISH_SYSTEM, json.dumps(script_data, ensure_ascii=False), polish=True)
+    raw = await generate_text(system or POLISH_SYSTEM, json.dumps(script_data, ensure_ascii=False), polish=True)
     try:
         result = _parse_first_json(raw)
         if "script" in result and isinstance(result["script"], list):
@@ -467,13 +467,16 @@ async def _opus_polish(script_data: dict) -> dict:
 
 
 def generate_from_paper_iterative(
-    paper_title: str, authors: list[str], venue: str, paper_text: str, slug: str, rounds: int = 5, lang: str = "ko"
+    paper_title: str, authors: list[str], venue: str, paper_text: str, slug: str, rounds: int = 5, lang: str = "ko",
+    systems: dict | None = None,
 ) -> dict:
-    """N rounds of self-critique + refine + 1 Opus polish. Saves history."""
-    final, history = asyncio.run(_iterate(paper_title, authors, venue, paper_text, rounds, lang=lang))
+    """N rounds of self-critique + refine + 1 Opus polish. Saves history.
+
+    systems: optional {"draft", "critic", "polish"} system prompts (templates/shortform)."""
+    final, history = asyncio.run(_iterate(paper_title, authors, venue, paper_text, rounds, lang=lang, systems=systems))
     if lang == "ko":
         print("  [polish] reviewing for awkward dialogue...", flush=True)
-        final = asyncio.run(_opus_polish(final))
+        final = asyncio.run(_opus_polish(final, system=(systems or {}).get("polish")))
     # Save history for inspection
     hist_path = SCRIPTS_DIR / f"{slug}-shorts.history.json"
     hist_path.write_text(json.dumps({"rounds": history}, ensure_ascii=False, indent=2), encoding="utf-8")

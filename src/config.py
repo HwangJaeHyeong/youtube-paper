@@ -52,6 +52,8 @@ CLOVA_TTS_URL = "https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts"
 QWEN_TTS_URL = os.getenv("QWEN_TTS_URL", "http://127.0.0.1:8880/tts")
 # Lines per GPU forward pass. 16GB VRAM (RTX 5070 Ti) 기준 시작값 — OOM 나면 줄이고, 여유 있으면 올릴 것.
 QWEN_TTS_BATCH = int(os.getenv("QWEN_TTS_BATCH", "16"))
+# Characters per GPU pass. 12 lines of ~50-80 chars (shortform) ran out of 16GB; lower it on OOM.
+QWEN_TTS_BATCH_CHARS = int(os.getenv("QWEN_TTS_BATCH_CHARS", "240"))
 # Korean host voices: qwen (default) | clova
 KO_TTS = os.getenv("KO_TTS", "qwen").strip().lower()
 

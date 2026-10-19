@@ -6,7 +6,7 @@ Commands:
     python -m src.pipeline shorts <slug>            # 쇼츠: 스크립트 + mp3 + mp4
     python -m src.pipeline upload <slug> [--shorts] [--public]
     python -m src.pipeline all <arxiv_id>           # 위 전부
-    python -m src.pipeline inbox                    # input/*.pdf -> output/*.mp4 (docker compose up)
+    python -m src.pipeline inbox                    # input/*.pdf, input/<폴더>/ -> output/*.mp4 (docker compose up, TEMPLATE=default|shortform)
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import urllib.request
+from datetime import datetime
 from pathlib import Path
 
 import typer
@@ -277,14 +278,20 @@ def inbox(
     out_dir: Path = typer.Option(Path("output"), help="완성 mp4 폴더"),
     venue: str = typer.Option("", help="학회 표기 (모든 PDF 공통)"),
 ) -> None:
-    """input/*.pdf -> 쇼츠 mp4 를 output/ 에 (+ YOUTUBE_UPLOAD 설정 시 업로드), 끝난 PDF 는 input/finished/ 로. 실패한 PDF 는 그대로 둠."""
+    """input/*.pdf 와 input/<폴더>/(PDF + 데모 영상) -> 쇼츠 mp4 를 output/ 에 (+ YOUTUBE_UPLOAD 설정 시 업로드).
+
+    TEMPLATE=default (민재·수빈) | shortform (templates/shortform, 폴더의 영상은 도입부 데모).
+    끝난 PDF/폴더는 input/finished/ 로. 실패한 건 그대로 둠."""
     done = in_dir / "finished"
     done.mkdir(parents=True, exist_ok=True)
     out_dir.mkdir(parents=True, exist_ok=True)
-    pdfs = sorted(in_dir.glob("*.pdf"))
-    log.info("inbox: %d PDF", len(pdfs))
+    items = sorted(in_dir.glob("*.pdf")) + sorted(d for d in in_dir.iterdir() if d.is_dir() and d.name != "finished")
+    template = os.getenv("TEMPLATE", "default").strip().lower() or "default"
+    if template not in ("default", "shortform"):
+        raise typer.BadParameter(f"TEMPLATE={template!r} (default | shortform)")
+    log.info("inbox: %d item(s), template=%s", len(items), template)
     try:
-        failed = _process_inbox(pdfs, done, out_dir, venue)
+        failed = _process_inbox(items, done, out_dir, venue, template)
     finally:
         if os.getenv("QWEN_TTS_SHUTDOWN_AFTER"):  # docker compose: stop the GPU server too
             from src.config import QWEN_TTS_URL
@@ -296,16 +303,36 @@ def inbox(
         raise typer.Exit(1)
 
 
-def _process_inbox(pdfs: list[Path], done: Path, out_dir: Path, venue: str) -> int:
+def _process_inbox(items: list[Path], done: Path, out_dir: Path, venue: str, template: str = "default") -> int:
+    from src import shortform
+
+    def slug_of(item: Path) -> str:
+        # Slug must be ASCII-safe (file globbing); hash keeps Korean-named inputs unique.
+        # Template prefix keeps each template's cached script separate.
+        ascii_part = re.sub(r"[^a-z0-9]+", "-", (item.stem if item.is_file() else item.name).lower()).strip("-")[:40]
+        return f"{'sf-' if template == 'shortform' else ''}{ascii_part or 'paper'}-{hashlib.sha1(item.name.encode()).hexdigest()[:6]}"
+
     failed = 0
-    for pdf in pdfs:
-        # Slug must be ASCII-safe (file globbing); hash keeps Korean-named PDFs unique.
-        ascii_part = re.sub(r"[^a-z0-9]+", "-", pdf.stem.lower()).strip("-")[:40]
-        slug = f"{ascii_part or 'paper'}-{hashlib.sha1(pdf.name.encode()).hexdigest()[:6]}"
+    for item in items:
+        name = item.stem if item.is_file() else item.name
+        slug = slug_of(item)
         try:
-            shutil.copy2(pdf, PAPERS_DIR / f"{slug}.pdf")
-            mp4 = _shorts_from_pdf(PAPERS_DIR / f"{slug}.pdf", slug, venue)
-            shutil.copy2(mp4, out_dir / f"{pdf.stem}.mp4")
+            pdf, demo = shortform.pick_inputs(item) if item.is_dir() else (item, None)
+            if template == "shortform":
+                mp4 = shortform.build(pdf, demo, slug, venue)
+            else:
+                if demo:
+                    log.warning("%s: TEMPLATE=default 는 데모 영상을 쓰지 않음 (%s)", name, demo.name)
+                shutil.copy2(pdf, PAPERS_DIR / f"{slug}.pdf")
+                mp4 = _shorts_from_pdf(PAPERS_DIR / f"{slug}.pdf", slug, venue)
+            folder = out_dir / name  # output/<name>/<name>.mp4 + 설명.txt
+            folder.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(mp4, folder / f"{name}.mp4")
+            except PermissionError:  # the old one is open in a player (Windows locks it): keep both
+                alt = folder / f"{name}-{datetime.now():%Y%m%d-%H%M%S}.mp4"
+                shutil.copy2(mp4, alt)
+                log.warning("%s/%s.mp4 is open elsewhere; saved as %s", name, name, alt.name)
             # YOUTUBE_UPLOAD=private|unlisted|public uploads as Shorts; empty = skip.
             # Marker file prevents re-uploading when the same PDF is processed again.
             uploaded = VIDEOS_DIR / f"{slug}-shorts.youtube"
@@ -313,12 +340,26 @@ def _process_inbox(pdfs: list[Path], done: Path, out_dir: Path, venue: str) -> i
                 uploaded.write_text(upload(f"{slug}-shorts", privacy=privacy, shorts=True, channel="", publish_at=""))
             elif uploaded.exists():
                 log.info("already uploaded: https://www.youtube.com/watch?v=%s (skip)", uploaded.read_text().strip())
-            shutil.move(str(pdf), str(done / pdf.name))
-            log.info("done: %s -> %s", pdf.name, out_dir / f"{pdf.stem}.mp4")
-        except Exception:
+            write_description(folder, f"{slug}-shorts")
+            target = done / item.name
+            if target.exists():  # same name finished before: keep both
+                target = done / f"{name}-{datetime.now():%Y%m%d-%H%M%S}{item.suffix}"
+            shutil.move(str(item), str(target))  # PDF or the whole input folder
+            _cleanup(slug)
+            log.info("done: %s -> %s", item.name, out_dir / name)
+        except Exception:  # work files stay, so a retry reuses the script/audio
             failed += 1
-            log.exception("failed: %s (left in %s)", pdf.name, pdf.parent)
+            log.exception("failed: %s (left in %s)", item.name, item.parent)
     return failed
+
+
+def _cleanup(slug: str) -> None:
+    """After a finished item: drop the PDF copy, audio, images, script history and the data/videos
+    copy. Kept: output/<name>.mp4, the script data/scripts/<slug>-shorts.json (moving the input back
+    to input/ remakes the same video from it) and the .youtube upload marker (blocks re-uploads)."""
+    shutil.rmtree(AUDIO_DIR / f"{slug}-shorts", ignore_errors=True)
+    for p in [PAPERS_DIR / f"{slug}.pdf", VIDEOS_DIR / f"{slug}-shorts.mp4", SCRIPTS_DIR / f"{slug}-shorts.history.json"]:
+        p.unlink(missing_ok=True)
 
 
 @app.command("anime-shorts")
@@ -398,16 +439,17 @@ def anime_shorts(
     typer.echo(json.dumps({"shorts_slug": shorts_slug, "mp4": str(out_mp4)}))
 
 
-@app.command()
-def upload(
-    slug: str,
-    privacy: str = typer.Option("private", help="private | unlisted | public"),
-    shorts: bool = typer.Option(False, "--shorts", help="Mark as YouTube Shorts"),
-    channel: str = typer.Option("", help="채널 별칭 (token file 접미사). 비우면 기본 채널."),
-    publish_at: str = typer.Option("", help="RFC3339 예약 시각 (예: 2026-04-22T19:00:00+09:00)."),
-) -> str:
-    """생성된 mp4 를 YouTube 에 업로드. Returns video id."""
-    mp4 = VIDEOS_DIR / f"{slug}.mp4"
+def write_description(folder: Path, slug: str) -> Path:
+    """설명.txt next to the video: exactly the text that goes into the YouTube description box."""
+    _, description, _ = upload_meta(slug, shorts=True)
+    out = folder / "설명.txt"
+    out.write_text(description, encoding="utf-8")
+    return out
+
+
+def upload_meta(slug: str, shorts: bool) -> tuple[str, str, list[str]]:
+    """(title, description, tags) for a YouTube upload, built from the script. Also written to
+    output/<name>/설명.txt so what was (or will be) uploaded sits next to the video."""
     # Prefer the slug-exact JSON (e.g. "<slug>-shorts.json"); fall back to stripped variant.
     script_json = SCRIPTS_DIR / f"{slug}.json"
     if not script_json.exists():
@@ -432,6 +474,8 @@ def upload(
         title_hook, primary_tag_raw, content_type = "", "", "paper"
     import re as _re
     title = title_hook if title_hook else paper_title
+    # title_hook is "Hook\n(**Lab** Paper)": YouTube titles are one line of plain text
+    title = " ".join(_re.sub(r"\*\*", "", title).split())
     primary_tag = _re.sub(r"[^\w가-힣]", "", primary_tag_raw) if primary_tag_raw \
         else _re.sub(r"[^\w가-힣]", "", (paper_title.split()[0] if paper_title else "PaperCast"))
     if lang == "en":
@@ -486,6 +530,20 @@ def upload(
         ]
     if shorts:
         tags.append("Shorts")
+    return title, description, tags
+
+
+@app.command()
+def upload(
+    slug: str,
+    privacy: str = typer.Option("private", help="private | unlisted | public"),
+    shorts: bool = typer.Option(False, "--shorts", help="Mark as YouTube Shorts"),
+    channel: str = typer.Option("", help="채널 별칭 (token file 접미사). 비우면 기본 채널."),
+    publish_at: str = typer.Option("", help="RFC3339 예약 시각 (예: 2026-04-22T19:00:00+09:00)."),
+) -> str:
+    """생성된 mp4 를 YouTube 에 업로드. Returns video id."""
+    mp4 = VIDEOS_DIR / f"{slug}.mp4"
+    title, description, tags = upload_meta(slug, shorts)
     video_id = yt_upload.upload(
         mp4, title, description, tags, privacy_status=privacy, is_shorts=shorts,
         channel=channel or None, publish_at=publish_at or None,

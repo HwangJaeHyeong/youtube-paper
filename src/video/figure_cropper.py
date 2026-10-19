@@ -28,6 +28,10 @@ def _find_caption_rect(page: fitz.Page, ref: str) -> fitz.Rect | None:
     """
     short = ref.replace("Figure", "Fig.")
     is_table = ref.lower().startswith("table")
+    if is_table:  # IEEE tables are numbered in Roman numerals ("TABLE II:"); search is case-insensitive
+        from src.video.figure_indexer import int_to_roman
+
+        short = f"Table {int_to_roman(int(ref.split()[-1]))}"
 
     # Patterns ordered by caption-distinctiveness.
     pattern_groups = [
@@ -156,7 +160,7 @@ def _all_caption_rects(page: fitz.Page) -> list[fitz.Rect]:
     """
     rects: list[fitz.Rect] = []
     text = page.get_text()
-    for m in re.finditer(r"(?:Figure|Fig\.|Table)\s*\d+(?:\.\d+){0,2}\s*[:.|]", text):
+    for m in re.finditer(r"(?:Figure|Fig\.|Table|TABLE)\s*(?:\d+(?:\.\d+){0,2}|[IVXL]+)\s*[:.|]", text):
         for r in page.search_for(m.group()):
             rects.append(r)
     return rects
@@ -244,7 +248,7 @@ def crop_visual(pdf_path: Path, page_idx_1based: int, ref: str, out_png: Path, d
         doc.close()
 
 
-_REF_RE = re.compile(r"(?i)(figure|fig\.?|table)\s*(\d+)")
+_REF_RE = re.compile(r"(?i)(figure|fig\.?|table)\s*(\d+|[IVXL]+\b)")
 
 
 def normalize_ref(ref: str | None) -> str | None:
@@ -261,8 +265,10 @@ def normalize_ref(ref: str | None) -> str | None:
         return ref
     m = _REF_RE.search(ref)
     if m:
+        from src.video.figure_indexer import roman_to_int
+
         kind = "Figure" if m.group(1).lower().startswith("fig") else "Table"
-        return f"{kind} {int(m.group(2))}"
+        return f"{kind} {roman_to_int(m.group(2))}"
     # External / user-supplied ref (e.g. "RNN", "CNN", "LLM_logos") — keep as-is.
     # Pipeline will look for crops/<ref>.png and use it if present.
     return ref.strip()

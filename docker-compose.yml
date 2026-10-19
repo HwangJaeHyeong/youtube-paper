@@ -1,4 +1,6 @@
-# `docker compose up` : input/*.pdf -> output/*.mp4, finished PDFs -> input/finished/,
+# `docker compose up` : input/*.pdf, input/<folder>/(pdf+demo video) -> output/*.mp4
+#   template: TEMPLATE=shortform in .env (or `$env:TEMPLATE="shortform"; docker compose up`)
+#   finished inputs -> input/finished/,
 # then both containers exit (app tells qwen-tts to shut down) and `up` returns.
 services:
   qwen-tts:
@@ -34,6 +36,7 @@ services:
       - TZ=Asia/Seoul  # log timestamps in KST
       - YOUTUBE_UPLOAD=${YOUTUBE_UPLOAD-private}  # private|unlisted|public, set empty in .env = no upload
       - DATA_DIR=/app/data
+      - TEMPLATE=${TEMPLATE:-default}  # default (민재·수빈) | shortform (templates/shortform)
     volumes:
       - .:/app
     depends_on:

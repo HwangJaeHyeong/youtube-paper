@@ -23,18 +23,39 @@ _STRICT_PATTERNS = [
     re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*\|"),
     # Colon ("Figure 1: Title", CHI/ACM/IEEE)
     re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*:"),
-    re.compile(r"(?i)\b(table)\s*(\d+)\s*[:|]"),
+    # IEEE writes tables as "TABLE II:" (Roman numerals); normalised to "Table 2"
+    re.compile(r"(?i)\b(table)\s*(\d+|[IVXL]+)\s*[:|]"),
 ]
 # LOOSE patterns — period after the number. Captures real captions in some
 # IEEE styles but ALSO catches sentence-ending body references. Used only as
 # a fallback when strict patterns produced no hit for a given key.
 _LOOSE_PATTERNS = [
     re.compile(r"(?i)\b(figure|fig\.)\s*(\d+)\s*\."),
-    re.compile(r"(?i)\b(table)\s*(\d+)\s*\."),
+    re.compile(r"(?i)\b(table)\s*(\d+|[IVXL]+)\s*\."),
 ]
 
 
+def roman_to_int(text: str) -> int:
+    """'IV' -> 4; digits pass through."""
+    if text.isdigit():
+        return int(text)
+    values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100}
+    total = 0
+    for a, b in zip(text.upper(), text.upper()[1:] + " "):
+        total += -values[a] if values.get(b, 0) > values[a] else values[a]
+    return total
+
+
+def int_to_roman(n: int) -> str:
+    out = ""
+    for v, r in ((50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I")):
+        while n >= v:
+            out, n = out + r, n - v
+    return out
+
+
 def _normalize(kind: str, number: str) -> str:
+    number = str(roman_to_int(number))
     k = kind.lower()
     if k in ("figure", "fig."):
         return f"Figure {int(number)}"
