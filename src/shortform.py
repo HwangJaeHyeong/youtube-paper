@@ -122,6 +122,8 @@ def shot_list(lines: list[dict], tokens: list[dict], starts: list[float]) -> lis
 
 SFX_KINDS = ("positive", "negative", "weird", "surprise", "transition")
 SFX_GAP = 1.5  # seconds between two sound effects
+SFX_SNAP = 1.0  # a sound this close to a screen change moves onto it; farther ones are dropped
+MAX_SECONDS = 59.5  # hard cap incl. the ending line: longer narration is sped up (pitch kept)
 
 
 def sfx_events(lines: list[dict], tokens: list[dict], starts: list[float]) -> list[tuple[float, str]]:
@@ -145,12 +147,60 @@ def sfx_events(lines: list[dict], tokens: list[dict], starts: list[float]) -> li
             if mood and mood != last_mood:
                 moods.append((t, mood))
             last_mood = mood or last_mood
+    # Rule: sounds only where the screen changes. A sound within SNAP of a change moves onto it, others go.
+    changes, prev = [], None
+    for t, v in shot_list(lines, tokens, starts):
+        if v and v != prev:
+            changes.append(t)
+        prev = v or prev
     # Script sounds first, mood sounds fill in; any two sounds stay at least SFX_GAP apart.
     kept: list[tuple[float, str]] = []
-    for e in sorted(events) + sorted(moods):
-        if e[0] >= 1.0 and all(abs(e[0] - k[0]) >= SFX_GAP for k in kept):
-            kept.append(e)
+    for t, kind in sorted(events) + sorted(moods):
+        near = min(changes, key=lambda c: abs(c - t), default=None)
+        if near is None or abs(near - t) > SFX_SNAP:
+            continue
+        if near >= 1.0 and all(abs(near - k[0]) >= SFX_GAP for k in kept):
+            kept.append((near, kind))
     return sorted(kept)
+
+
+def vary_screens(lines: list[dict], hold: int = 3) -> None:
+    """Rules: no screen (Figure/Table crop, demo clip, picture) is shown twice, and one screen stays
+    for at most `hold` script lines. A repeat, or the line after the hold runs out, becomes an
+    ILLUST moment instead (the picker finds a picture for it)."""
+    def key(item: dict) -> str | None:
+        v = _visual(item)
+        if v == "ILLUST" or v == "DEMO":  # no picture / clip chosen yet: a new screen every time
+            return f"{v}#{item['illust']}" if item.get("illust") else f"{v}@{id(item)}"
+        return v
+
+    def to_illust(item: dict) -> None:
+        for k in _SCREEN_KEYS:
+            item.pop(k, None)
+        item["visual_ref"] = "ILLUST"
+
+    used: set[str] = set()
+    current, run = None, 0
+    for i, line in enumerate(lines):
+        if _ref(line.get("visual_ref")) == "OUTRO":
+            continue
+        changed = False
+        for item in [line] + ((line.get("cuts") or []) if _cuts_allowed(i, line) else []):
+            k = key(item)
+            if k is None or k == current:
+                continue
+            if k in used:
+                log.info("화면 반복 L%d %s -> 일러스트로", i, k)
+                to_illust(item)
+                k = key(item)
+            used.add(k)
+            current, changed = k, True
+        run = 1 if changed else run + 1
+        if run > hold:
+            log.info("화면이 %d줄째 그대로 L%d -> 일러스트로", run, i)
+            to_illust(line)
+            current, run = key(line), 1
+            used.add(current)
 
 
 _DB: dict[Path, float] = {}
@@ -241,7 +291,7 @@ def easy_illust(lines: list[dict]) -> None:
         cut["visual_ref"] = "ILLUST"
 
 
-TARGET_CHARS = (570, 620)  # ~10.5 chars/s spoken + the ~2.5s ending line = 57~59s (measured)
+TARGET_CHARS = (550, 600)  # ~10.5 chars/s spoken + the ~2.5s ending line = 56~59s (measured)
 
 
 def script_issues(lines: list[dict]) -> list[str]:
@@ -250,7 +300,7 @@ def script_issues(lines: list[dict]) -> list[str]:
     total = sum(len(l["text"]) for l in lines)
     lo, hi = TARGET_CHARS
     if total < lo:
-        issues.append(f"전체 {total}자로 영상이 {total // 10}초뿐임. 57~59초가 되게 {lo - total}자 이상 늘릴 것 "
+        issues.append(f"전체 {total}자로 영상이 {total // 10}초뿐임. 56~59초가 되게 {lo - total}자 이상 늘릴 것 "
                       f"(방법·결과를 구체적으로, 줄을 추가해서. 한 줄은 {MAX_LINE}자 이하 유지)")
     elif total > hi + 15:
         issues.append(f"전체 {total}자로 60초를 넘김. {total - hi}자 이상 줄일 것")
@@ -311,7 +361,8 @@ def _validate(data: dict) -> None:
         critique = json.dumps({"critical_issues": issues, "specific_fixes": issues}, ensure_ascii=False)
         try:
             fixed = shorts_generator._parse_first_json(
-                asyncio.run(shorts_generator._refine_query(json.dumps(data, ensure_ascii=False), critique)))
+                asyncio.run(shorts_generator._refine_query(json.dumps(data, ensure_ascii=False), critique,
+                                                        system=_prompt("refine.md"))))
             if isinstance(fixed.get("script"), list) and fixed["script"]:
                 data["script"] = fixed["script"]
                 for line in data["script"]:
@@ -326,6 +377,30 @@ def _validate(data: dict) -> None:
     left = script_issues(data["script"])
     if left:
         log.warning("대본 검증 후에도 남은 문제: %s", left)
+
+
+REVIEW_PASS = 90  # script and illustration reviews: below this the model fixes / re-picks
+
+
+def _review_script(data: dict, paper, rounds: int = 2) -> None:
+    """The stronger model checks the script against the paper (templates/shortform/review.md: accuracy,
+    flow, easiness, readability out of 100) and returns a fixed script when it scores below REVIEW_PASS."""
+    for r in range(1, rounds + 1):
+        prompt = (f"논문 제목: {paper.title}\n\n[논문 본문 (발췌)]\n{paper.text[:30000]}\n\n"
+                  f"[완성 대본]\n{json.dumps(data['script'], ensure_ascii=False)}")
+        try:
+            out = _ask_json("review.md", prompt, "score", polish=True)
+        except Exception as e:
+            log.warning("대본 검토 실패, 그대로 진행: %s", e)
+            return
+        score = int(out.get("score") or 0)
+        log.info("대본 검토 %d회차: %d점 %s", r, score, (out.get("problems") or [])[:5])
+        if score >= REVIEW_PASS or not isinstance(out.get("script"), list) or not out["script"]:
+            return
+        data["script"] = out["script"]
+        for line in data["script"]:
+            line["speaker"] = SPEAKER
+            line["text"] = strip_punct(line["text"])
 
 
 def _ask_json(template: str, prompt: str, key: str, images: list[Path] | None = None, tries: int = 3,
@@ -417,10 +492,12 @@ def demo_catalog(demo: Path, work: Path) -> list[dict]:
     try:
         out = _ask_json("demo.md", f"[구간 목록]\n{listing}", "clips", images=sheets)
         descs = {int(c["id"]): c["desc"] for c in out["clips"]}
+        wows = {int(c["id"]): int(c.get("wow", 3)) for c in out["clips"]}
     except Exception as e:
         log.warning("데모 분석 실패, 데모는 영상 시간대로 재생: %s", e)
         return []
-    catalog = [{"id": i, "start": a, "end": b, "desc": descs.get(i, "")} for i, (a, b) in enumerate(spans, 1)]
+    catalog = [{"id": i, "start": a, "end": b, "desc": descs.get(i, ""), "wow": wows.get(i, 3)}
+               for i, (a, b) in enumerate(spans, 1)]
     cached.write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
     for c in catalog:
         log.info("데모 #%d %.1f-%.1fs: %s", c["id"], c["start"], c["end"], c["desc"])
@@ -428,7 +505,13 @@ def demo_catalog(demo: Path, work: Path) -> list[dict]:
 
 
 def catalog_text(catalog: list[dict]) -> str:
-    return "\n".join(f"#{c['id']} ({c['end'] - c['start']:.1f}초): {c['desc']}" for c in catalog)
+    return "\n".join(f"#{c['id']} ({c['end'] - c['start']:.1f}초, 하이라이트 {c.get('wow', 3)}/5): {c['desc']}"
+                     for c in catalog)
+
+
+def highlight(catalog: list[dict]) -> dict:
+    """The clip the short opens on: highest "wow", the longer one on ties (it holds the hook line)."""
+    return max(catalog, key=lambda c: (c.get("wow", 3), c["end"] - c["start"]))
 
 
 def plan_shots(shots: list[tuple[float, str | None]], duration: float, available: set[str],
@@ -526,15 +609,18 @@ def _script(pdf: Path, slug: str, venue: str, catalog: list[dict]) -> dict:
         paper_title=paper.title or slug, authors=paper.authors, venue=venue,
         paper_text=fig_info + analogy_info + pool_info + demo_info + paper.text,
         slug=slug, rounds=1, lang="ko",
-        systems={"draft": _prompt("prompt.md"), "critic": _prompt("critic.md"), "polish": _prompt("polish.md")},
+        systems={"draft": _prompt("prompt.md"), "critic": _prompt("critic.md"), "refine": _prompt("refine.md"),
+                 "polish": _prompt("polish.md")},
     )
     for line in data["script"]:
         line["speaker"] = SPEAKER
         line["text"] = strip_punct(line["text"])
     data.setdefault("metadata", {})["template"] = "shortform"
+    _review_script(data, paper)
     _validate(data)
     easy_illust(data["script"])
     _match_demo(data, paper, catalog)
+    vary_screens(data["script"])
     use_pool(data["script"], pool)
     _pick_illustrations(data, paper, AUDIO_DIR / f"{slug}-shorts")  # only for ILLUST moments still without a picture
     cached.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -645,16 +731,39 @@ def _fetch(url: str) -> bytes:
         return r.read()
 
 
+def _illust_sheets(items: list[tuple[str, str]], out_dir: Path, name: str) -> list[Path]:
+    """[(label, いらすとや url)] -> numbered JPEG contact sheets, 4x3 tiles each (JPEG keeps each
+    read under the SDK's 1MB cap)."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    font = _font({"font": json.loads((TEMPLATE / "design.json").read_text(encoding="utf-8"))["font"]}, 26)
+    tiles = []
+    for label, url in items:
+        try:
+            img = Image.open(io.BytesIO(_fetch(_sized(url, "s300")))).convert("RGBA")
+        except OSError:
+            continue
+        tile = Image.new("RGB", (300, 340), (255, 255, 255))
+        img = ImageOps.contain(img, (290, 290))
+        tile.paste(img, ((300 - img.width) // 2, 45), img)
+        ImageDraw.Draw(tile).text((8, 6), label, font=font, fill=(200, 0, 0))
+        tiles.append(tile)
+    sheets = []
+    for k in range(0, len(tiles), 12):
+        sheet = Image.new("RGB", (300 * 4, 340 * 3), (255, 255, 255))
+        for j, tile in enumerate(tiles[k:k + 12]):
+            sheet.paste(tile, (300 * (j % 4), 340 * (j // 4)))
+        sheets.append(out_dir / f"{name}_{k // 12 + 1}.jpg")
+        sheet.save(sheets[-1], quality=80)
+    return sheets
+
+
 def _pick_illustrations(data: dict, paper, work: Path) -> None:
-    """For every "원래는 이랬음" line (visual_ref "ILLUST"): the model writes Japanese search words
-    (templates/shortform/illust_search.md), we search いらすとや, the model looks at the candidates on
-    numbered sheets and picks one per line (illust_pick.md). Stores line["illust_url"]; a line with no
-    good match keeps the previous screen."""
-    import asyncio
-
-    from src.llm import generate_text
-
+    """For every ILLUST moment still without a picture: the model writes Japanese search words
+    (templates/shortform/illust_search.md; the last one is the line's subject, as a fallback), we search
+    いらすとや, the model looks at the candidates on numbered sheets and picks one per moment
+    (illust_pick.md). Pictures already in the video are not offered again."""
     found = [m for m in moments(data["script"], "ILLUST") if not m[1].get("illust_url")]
+    avoid = {m[1]["illust_url"] for m in moments(data["script"], "ILLUST") if m[1].get("illust_url")}
     targets = {key: item for key, item, _ in found}
     spoken = {key: text for key, _, text in found}
     if not targets:
@@ -667,44 +776,26 @@ def _pick_illustrations(data: dict, paper, work: Path) -> None:
     except Exception as e:
         log.warning("이라스토야 검색어 생성 실패, 그림 없이 진행: %s", e)
         return
-    out_dir = work / "illust"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    font = _font({"font": json.loads((TEMPLATE / "design.json").read_text(encoding="utf-8"))["font"]}, 26)
     cands: dict[str, list[tuple[str, str]]] = {}
-    tiles = []
     for key in targets:
         seen: dict[str, str] = {}
-        for q in (queries.get(key) or [])[:3]:
+        for q in (queries.get(key) or [])[:4]:  # the 4th is the line's subject: always finds something
             try:
                 hits = irasutoya_search(q)
                 if not hits and " " in q:  # multi-word searches often match nothing: retry the main word
                     hits = irasutoya_search(q.split()[0])
                 for title, url in hits:
-                    seen.setdefault(url, title)
+                    if _sized(url, "s800") not in avoid:
+                        seen.setdefault(url, title)
             except OSError as e:
                 log.warning("이라스토야 검색 실패 %r: %s", q, e)
         cands[key] = list(seen.items())[:9]
         log.info("이라스토야 %s: 검색어 %s -> 후보 %d개", key, queries.get(key), len(cands[key]))
-        for n, (url, title) in enumerate(cands[key], 1):
-            try:
-                img = Image.open(io.BytesIO(_fetch(_sized(url, "s300")))).convert("RGBA")
-            except OSError:
-                continue
-            tile = Image.new("RGB", (300, 340), (255, 255, 255))
-            img = ImageOps.contain(img, (290, 290))
-            tile.paste(img, ((300 - img.width) // 2, 45), img)
-            ImageDraw.Draw(tile).text((8, 6), f"{key}-{n}", font=font, fill=(200, 0, 0))
-            tiles.append(tile)
-    if not tiles:
+    sheets = _illust_sheets([(f"{key}-{n}", url) for key in cands for n, (url, _) in enumerate(cands[key], 1)],
+                            work / "illust", "sheet")
+    if not sheets:
         log.warning("이라스토야 후보 없음, 그림 없이 진행")
         return
-    sheets = []
-    for k in range(0, len(tiles), 12):  # 4x3 per sheet, JPEG keeps each read under the SDK's 1MB cap
-        sheet = Image.new("RGB", (300 * 4, 340 * 3), (255, 255, 255))
-        for j, tile in enumerate(tiles[k:k + 12]):
-            sheet.paste(tile, (300 * (j % 4), 340 * (j // 4)))
-        sheets.append(out_dir / f"sheet_{k // 12 + 1}.jpg")
-        sheet.save(sheets[-1], quality=80)
     listing = "\n".join(f"{key}-{n}: {title}" for key in cands for n, (_, title) in enumerate(cands[key], 1))
     ask = f"[그림이 필요한 줄]\n" + "\n".join(f"{k}: {spoken[k]}" for k in targets) + f"\n\n[후보 제목]\n{listing}"
     try:
@@ -715,8 +806,9 @@ def _pick_illustrations(data: dict, paper, work: Path) -> None:
         return
     for key, line in targets.items():
         m = re.fullmatch(rf"{key}-(\d+)", str(picks.get(key) or ""))
-        if m and 1 <= int(m.group(1)) <= len(cands[key]):
+        if m and 1 <= int(m.group(1)) <= len(cands[key]) and _sized(cands[key][int(m.group(1)) - 1][0], "s800") not in avoid:
             url, title = cands[key][int(m.group(1)) - 1]
+            avoid.add(_sized(url, "s800"))  # one picture, one moment
             line["illust_url"] = _sized(url, "s800")
             if moods.get(key) in SFX_KINDS:  # a change of mood between pictures gets a sound effect
                 line["illust_mood"] = moods[key]
@@ -769,12 +861,19 @@ def _match_demo(data: dict, paper, catalog: list[dict]) -> None:
 
     from src.llm import generate_text
 
-    moments = demo_moments(data["script"]) if catalog else []
+    if not catalog:
+        return
+    # Rule: the first screen is the demo's highlight, whatever the writer chose for the hook.
+    best = highlight(catalog)
+    hook = data["script"][0]
+    hook["visual_ref"], hook["demo_clip"] = "DEMO", best["id"]
+    log.info("첫 화면 = 데모 하이라이트 #%d (%d/5): %s", best["id"], best.get("wow", 3), best["desc"])
+    moments = [m for m in demo_moments(data["script"]) if m[1] is not hook]
     if not moments:
         return
     lines = "\n".join(f"L{i} [{l.get('visual_ref')}] {l['text']}" for i, l in enumerate(data["script"]))
     prompt = (f"논문 제목: {paper.title}\n\n[논문 본문 (발췌)]\n{paper.text[:30000]}\n\n[확정된 대본]\n{lines}\n\n"
-              f"[데모 영상 장면 목록]\n{catalog_text(catalog)}\n\n"
+              f"[데모 영상 장면 목록 — #{best['id']} 은 첫 화면(L0)에 이미 썼으니 다른 순간엔 쓰지 말 것]\n{catalog_text(catalog)}\n\n"
               "[데모 구간을 골라야 하는 순간]\n" + "\n".join(f"{k}: {t}" for k, _, t in moments))
     log.info("데모 매칭: 대본 + 데모 장면을 읽고 %d순간에 구간 배정", len(moments))
     try:
@@ -810,10 +909,13 @@ def build(pdf_in: Path, demo: Path | None, slug: str, venue: str = "") -> Path:
 
     log.info("3/4 숏폼 TTS %d lines", len(lines))
     mp3, wavs, _ = _run_tts_and_merge(data, shorts_slug)
-    speed = float(voice.get("speed", 1.0))
+    durs = [len(AudioSegment.from_file(wav)) / 1000 for wav in wavs]
+    raw = sum(durs) + sum(int(l.get("pause_after_ms", 200)) / 1000 for l in lines)
+    speed = max(float(voice.get("speed", 1.0)), raw / MAX_SECONDS)  # rule: the whole short stays under 60s
+    if speed > float(voice.get("speed", 1.0)):
+        log.info("나레이션 %.1f초 -> %.2f배속으로 %.1f초", raw, speed, MAX_SECONDS)
     starts, ends, t = [], [], 0.0
-    for line, wav in zip(lines, wavs):
-        dur = len(AudioSegment.from_file(wav)) / 1000
+    for line, dur in zip(lines, durs):
         starts.append(t / speed)
         ends.append((t + dur) / speed)
         t += dur + int(line.get("pause_after_ms", 200)) / 1000
@@ -989,15 +1091,17 @@ def _selftest() -> None:
     got = script_issues([{"text": "가" * 41, "cuts": [{"at": "없음"}]}])
     assert got[0].startswith("전체 41자") and got[1].startswith("L0: 41자")
     assert not any(i.startswith("전체") for i in script_issues([{"text": "가" * 30}] * 19))  # 570 chars: in range
-    fx = [{"text": "님들 혹시 이거 암?", "sfx": "surprise"},
-          {"text": "근데 새우는 망함", "sfx": "nope", "cuts": [{"at": "새우는", "sfx": "negative"}]}]
-    ev = sfx_events(fx, line_tokens(fx, [0.0, 2.0], [2.0, 4.0]), [0.0, 2.0])
+    fx = [{"text": "님들 혹시 이거 암?", "sfx": "surprise", "visual_ref": "DEMO"},
+          {"text": "근데 새우는 망함", "sfx": "nope", "visual_ref": "Figure 1",
+           "cuts": [{"at": "새우는", "sfx": "negative", "visual_ref": "DEMO"}]},
+          {"text": "그래도 계속 볶음", "sfx": "weird"}]  # same screen: its sound is dropped (rule)
+    ev = sfx_events(fx, line_tokens(fx, [0.0, 2.0, 6.0], [2.0, 4.0, 8.0]), [0.0, 2.0, 6.0])
     assert [k for _, k in ev] == ["negative"] and ev[0][0] > 2.0  # the hook's sfx is dropped (rule)
     il = [{"text": "님들 혹시 이거 암?"},
-          {"text": "설거지가 산더미임", "visual_ref": "ILLUST", "illust_mood": "negative"},
-          {"text": "빨래도 산더미임", "visual_ref": "ILLUST", "illust_mood": "negative"},
-          {"text": "근데 로봇이 다 해줌", "visual_ref": "ILLUST", "illust_mood": "positive", "sfx": "surprise"},
-          {"text": "그래도 비쌈", "visual_ref": "ILLUST", "illust_mood": "weird"}]
+          {"text": "설거지가 산더미임", "visual_ref": "ILLUST", "illust_mood": "negative", "illust_url": "u/a.png"},
+          {"text": "빨래도 산더미임", "visual_ref": "ILLUST", "illust_mood": "negative", "illust_url": "u/b.png"},
+          {"text": "근데 로봇이 다 해줌", "visual_ref": "ILLUST", "illust_mood": "positive", "sfx": "surprise", "illust_url": "u/c.png"},
+          {"text": "그래도 비쌈", "visual_ref": "ILLUST", "illust_mood": "weird", "illust_url": "u/d.png"}]
     ev = sfx_events(il, line_tokens(il, [0, 2, 4, 6, 8], [2, 4, 6, 8, 10]), [0, 2, 4, 6, 8])
     # mood sounds only on a change; the script's own sound wins where both fall at once
     assert ev == [(2, "negative"), (6, "surprise"), (8, "weird")]
@@ -1020,6 +1124,16 @@ def _selftest() -> None:
     assert [v for *_, v in plan_shots(shots, 8.0, {"Figure 1"}, False, 0)] == ["Figure 1"]  # no clip: figure only
     old = [(0.0, None), (2.0, None), (4.0, "Figure 2"), (6.0, "Table 9")]  # older script, Table 9 not croppable
     assert plan_shots(old, 8.0, {"Figure 2"}, True, 4.0) == [(0.0, 4.0, "DEMO"), (4.0, 8.0, "Figure 2")]
+    vs = [{"text": "훅", "visual_ref": "DEMO", "demo_clip": 1}, {"text": "가", "visual_ref": "Figure 1"},
+          {"text": "나"}, {"text": "다", "visual_ref": "Figure 1"}, {"text": "라"},  # 4th line on Figure 1
+          {"text": "마", "visual_ref": "Figure 2"}, {"text": "바 사", "visual_ref": "Figure 3",
+                                                    "cuts": [{"at": "사", "visual_ref": "Figure 1"}]}]
+    vary_screens(vs)
+    assert [_ref(l.get("visual_ref")) for l in vs][4:6] == ["ILLUST", "Figure 2"]  # hold of 3 lines, then a picture
+    assert vs[6]["cuts"][0]["visual_ref"] == "ILLUST"  # Figure 1 again -> picture instead
+    cat = [{"id": 1, "start": 0, "end": 2, "wow": 1}, {"id": 2, "start": 2, "end": 4, "wow": 5},
+           {"id": 3, "start": 4, "end": 9, "wow": 5}, {"id": 4, "start": 9, "end": 10}]
+    assert highlight(cat)["id"] == 3  # top wow, the longer clip on ties
     toks = line_tokens([{"text": "가 나나"}], [1.0], [4.0])
     assert [(x["start"], x["end"]) for x in toks] == [(1.0, 2.0), (2.0, 4.0)]
 

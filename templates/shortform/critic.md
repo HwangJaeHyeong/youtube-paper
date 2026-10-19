@@ -10,9 +10,11 @@
 1. hook: 첫 줄이 제목과 같은 내용의 "님들 혹시 ~ 암?" 질문이고, 논문 이름이 아닌 일상 물건·상황으로 말하는가? "충격적인 반전/근황" 같은 정해진 문구를 쓰거나 제목과 동떨어지면 0점.
 2. tone: 끝까지 반말 음슴체(~함/~임/~해봄)인가? 존댓말·설명조가 섞이면 감점.
 2-1. no_punct: text에 마침표(.)나 쉼표(,)가 하나라도 있으면 0점. (물음표는 훅 줄만 허용, 숫자 소수점·천 단위 쉼표는 예외)
-2-2. length: 20~23줄, 전체 570~620자(엔딩 포함 57~59초)인가? 550자 미만이거나 640자 초과면 0점.
+2-2. length: 20~22줄, 전체 550~600자(엔딩 포함 60초 미만)인가? 530자 미만이거나 610자 초과면 0점.
 3. flow: 줄과 줄이 "~는데 / ~더니 / ~니"로 이어지는가? 단, 한 줄이 40자를 넘으면 0점 (음성이 깨짐).
-4. structure: 훅(DEMO) → 원래는 이랬음 2~3줄(ILLUST) → 논문 등장 → 방법 → 결과 → 반전/한계 → 마무리 순서인가?
+4. structure: 훅(DEMO) → 원래는 이랬음 2줄(ILLUST) → 논문 등장 → 방법 7~10줄 → 결과 2~3줄 → 반전/한계 → 마무리 순서인가?
+4-4. reactions: 결과 반응 줄·반전/한계 줄·마무리 줄에 각각 ILLUST 리액션 그림(mood)과 같은 감정의 sfx 가 있는가? (결과=positive, 한계=negative, 마무리=결론 감정) 하나라도 없거나 그림 감정과 sfx 가 다르면 0점.
+4-5. paper_focus: 논문 등장부터 마무리까지가 전체의 75% 이상(16줄 이상)이고, 본론 줄마다 논문에 근거가 있는가? 일상 얘기가 3줄을 넘거나 본론이 감상·농담으로 채워졌으면 0점.
 4-2. analogy: 비유가 영상 전체에서 1~2번뿐이고, 원리와 정확히 대응하는가? 3번 이상이면 감점(남발), 뜬금없거나 겉모습만 비슷하면 0점.
 4-3. paper_intro: 논문 등장 줄에 "~했다길래"와 "내가 직접 논문을 뜯어봄"이 그대로 있는가? 하나라도 없거나 바뀌었으면 0점.
 4-0. illust: ILLUST 줄·컷마다 일러스트 목록 번호("illust")와 mood 가 있고, 문장이 그 그림 제목이 보여주는 장면과 맞는가? 그림에 없는 내용을 말하면 감점.
@@ -23,16 +25,30 @@
 8. plain_language: 전문 용어를 바로 쉬운 말로 풀었는가?
 9. figure_refs: 서로 다른 Figure/Table 2~4개가 그 줄 내용과 맞게 쓰였는가?
 9-1. visual_mix: 훅 줄이 "DEMO"이고, 본론 중간에도 시스템이 뭔가 해내는 줄에 DEMO가 1~2번 섞였는가? DEMO 비율 30~50%, 연속 DEMO 3줄 이하인가? DEMO가 훅에만 있거나 아예 없으면 0점.
-9-2. repetition: 같은 Figure/Table·일러스트 번호·데모 장면이 반복되지 않는가? 한 Figure/Table 이 3번 이상 나오거나 같은 일러스트가 두 번 나오면 0점. 반복 대신 한 화면(특히 DEMO)을 길게 보여주는 건 괜찮다.
-9-3. sfx: 결과 수치=positive, "근데 진짜 문제는"=negative 가 모두 있는가(하나라도 없으면 0점)? 첫 줄(훅)에 효과음이 있으면 0점. 효과음이 8~12번, 내용과 맞는 감정(좋은 결과=positive, 문제=negative, 황당=weird, 훅·반전=surprise, 큰 장면 전환=transition)인가? 연달아 두 줄이거나 마지막 줄에 있으면 감점.
+9-2. repetition: 같은 Figure/Table·일러스트 번호·데모 장면이 다른 화면을 거쳐 다시 나오면 0점 (모든 화면은 한 번씩만). 한 화면이 4줄 이상 이어지면 0점 (최대 3줄, 그다음은 새 화면이나 일러스트).
+9-3. sfx: 효과음이 화면이 바뀌는 줄·컷에만 있는가 (화면이 그대로인 줄에 있으면 감점)? 결과 수치=positive, "근데 진짜 문제는"=negative 가 모두 있는가(하나라도 없으면 0점)? 첫 줄(훅)에 효과음이 있으면 0점. 효과음이 8~12번, 내용과 맞는 감정(좋은 결과=positive, 문제=negative, 황당=weird, 훅·반전=surprise, 큰 장면 전환=transition)인가? 마무리 줄에는 결론 감정(positive/negative) 효과음이 있어야 한다. 같은 종류가 연달아 세 번이면 감점.
 10. ending: 마지막 줄이 "이처럼 ~" 한 줄 결론으로 끝나는가? "좋아요·구독·유익했다면" 같은 인사가 있으면 0점 (엔딩 멘트는 코드가 붙임).
-11. factuality: 논문에 없는 수치·통계·일화가 없는가? 있으면 0점.
+12. easy_core: 논문 내용을 쉬운 핵심 2~3가지만 골랐는가? 세부 구조·실험 조건 나열, 영어 약어가 있으면 감점. 한 번 듣고 이해 안 되는 줄이 있으면 감점.
+13. coherence: 이야기가 불편함 → 누가 만듦 → 방법 → 결과 → 문제 → 결론 한 줄기로 이어지는가? 앞에서 안 나온 걸 "그거"로 부르거나, 순서가 뒤섞이거나, 같은 대상을 다른 이름으로 부르면 0점.
+14. readability: 한 줄에 한 가지 내용, 주어·동사가 바로 들리는가? 정보를 욱여넣은 줄마다 감점.
+11. factuality: 논문 밖 검증 불가 수치/통계/개인사 없음? (지어낸 통계, 출처 없는 일화 등 있으면 0점)
+
+[기본 템플릿(민재·수빈) 채점 항목 — 그대로]
+15. second_wave: 방법 중간(약 25초)에 "근데 더 놀라운 건~" 같은 두 번째 파동이 있는가? 없으면 0점 (여기서 시청자 이탈).
+16. retention_loops: 매 5~7초 새 호기심 포인트 or 페이오프? 데드존 3줄 이상 연속이면 0점.
+17. single_insight: 한 편이 하나의 통찰 중심? 팩트 나열 금지.
+18. density: 빈 감탄사·버리는 줄 0개.
+19. intuitive: 모든 라인이 한 번에 이해?
+20. concreteness: 추상어 대신 구체 수치/비유.
+21. figure_match: visual_ref 의 Figure/Table 이 그 줄 내용을 실제로 다루는가? (캡션과 줄 내용이 다르면 0점)
 
 [출력 — JSON 한 덩어리만, 코드펜스 없이]
 {
   "scores": {"title":n, "hook":n, "tone":n, "no_punct":n, "length":n, "flow":n, "structure":n, "daily_example":n, "analogy":n, "paper_intro":n, "twist":n, "flavor":n,
-             "honesty":n, "plain_language":n, "figure_refs":n, "visual_mix":n, "repetition":n, "sfx":n, "ending":n, "factuality":n},
-  "total": 0~200,
+             "honesty":n, "plain_language":n, "figure_refs":n, "visual_mix":n, "repetition":n, "sfx":n, "ending":n, "factuality":n, "reactions":n, "paper_focus":n,
+             "easy_core":n, "coherence":n, "readability":n, "second_wave":n, "retention_loops":n, "single_insight":n,
+             "density":n, "intuitive":n, "concreteness":n, "figure_match":n},
+  "total": 0~320,
   "critical_issues": ["가장 아픈 문제 3개"],
   "specific_fixes": ["라인 X를 ~로 바꿔라 식의 구체 지시 5~10개"]
 }

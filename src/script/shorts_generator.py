@@ -392,9 +392,9 @@ async def _critic_query(script_json: str, lang: str = "ko", system: str | None =
     return await generate_text(system or (CRITIC_SYSTEM_EN if lang == "en" else CRITIC_SYSTEM), script_json)
 
 
-async def _refine_query(script_json: str, critique_json: str, lang: str = "ko") -> str:
+async def _refine_query(script_json: str, critique_json: str, lang: str = "ko", system: str | None = None) -> str:
     prompt = f"[원본 대본]\n{script_json}\n\n[비평]\n{critique_json}"
-    return await generate_text(REFINE_SYSTEM_EN if lang == "en" else REFINE_SYSTEM, prompt)
+    return await generate_text(system or (REFINE_SYSTEM_EN if lang == "en" else REFINE_SYSTEM), prompt)
 
 
 async def _iterate(paper_title: str, authors: list[str], venue: str, paper_text: str, rounds: int, lang: str = "ko", systems: dict | None = None) -> tuple[dict, list[dict]]:
@@ -415,7 +415,8 @@ async def _iterate(paper_title: str, authors: list[str], venue: str, paper_text:
             critique = {"critical_issues": ["파싱 실패, 재작성 요망"], "specific_fixes": []}
             total = 0
         print(f"  [round {i}/{rounds}] score={total}, refining...", flush=True)
-        refined_raw = await _refine_query(json.dumps(current, ensure_ascii=False), json.dumps(critique, ensure_ascii=False), lang=lang)
+        refined_raw = await _refine_query(json.dumps(current, ensure_ascii=False), json.dumps(critique, ensure_ascii=False), lang=lang,
+                                         system=(systems or {}).get("refine"))
         try:
             current = _parse_first_json(refined_raw)
         except Exception:
@@ -472,7 +473,7 @@ def generate_from_paper_iterative(
 ) -> dict:
     """N rounds of self-critique + refine + 1 Opus polish. Saves history.
 
-    systems: optional {"draft", "critic", "polish"} system prompts (templates/shortform)."""
+    systems: optional {"draft", "critic", "refine", "polish"} system prompts (templates/shortform)."""
     final, history = asyncio.run(_iterate(paper_title, authors, venue, paper_text, rounds, lang=lang, systems=systems))
     if lang == "ko":
         print("  [polish] reviewing for awkward dialogue...", flush=True)
