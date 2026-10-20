@@ -25,6 +25,8 @@ except ImportError:
     ATTN = "sdpa"
 
 _model = None
+TAKES = int(os.getenv("QWEN_TTS_TAKES", "3"))
+TEMPERATURE = float(os.getenv("QWEN_TTS_TEMPERATURE", "0.7"))  # model default 0.9; lower = steadier reading
 
 
 def model():
@@ -82,10 +84,16 @@ class Handler(BaseHTTPRequestHandler):
             # The model sometimes never emits its stop token and keeps "talking" for minutes.
             # Cap the length: 12 codec tokens/s, ~10 Korean chars/s spoken, 2x headroom + 3s.
             longest = max(len(t) for t in req["text"])
-            wavs, sr = model().generate_voice_clone(
-                text=req["text"], language=req.get("language", "Korean"), voice_clone_prompt=clone_prompt(req),
-                max_new_tokens=int(12 * (longest / 5 + 3)),
-            )
+            # Sampling sometimes garbles a line (stutter, drawn-out syllables, cut-off ending): make
+            # TAKES versions and keep the one with the median length, which drops the outliers.
+            takes = []
+            for _ in range(TAKES):
+                wavs, sr = model().generate_voice_clone(
+                    text=req["text"], language=req.get("language", "Korean"), voice_clone_prompt=clone_prompt(req),
+                    max_new_tokens=int(12 * (longest / 5 + 3)), temperature=TEMPERATURE,
+                )
+                takes.append(wavs)
+            wavs = [sorted(versions, key=len)[len(versions) // 2] for versions in zip(*takes)]
             body, code = json.dumps({"wavs": [wav_b64(w, sr) for w in wavs]}).encode(), 200
         except Exception as e:  # report to client instead of dropping the connection
             try:

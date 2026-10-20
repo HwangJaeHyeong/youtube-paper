@@ -660,7 +660,8 @@ def _script(pdf: Path, slug: str, venue: str, catalog: list[dict]) -> dict:
     analogy_info = ("[비유 설계 — 본론(방법·결과)에서 아래 비유를 \"쉽게 말하면 ~ / 예를 들면 ~\" 으로 쓰고, 그 순간 cuts 로 ILLUST + 추천 그림 번호]\n"
                     + "\n".join(f"- {a['concept']} → {a['analogy']} (대응: {a.get('mapping', '')}; 추천 그림: "
                                 f"{', '.join('#' + str(i) for i in a.get('candidates', [])) or '목록에서 고를 것'})"
-                                for a in analogies) + "\n\n") if analogies else ""
+                                for a in analogies) + "\n\n") if analogies else (
+        "[비유 설계 — 없음: 이 논문에는 딱 맞는 비유가 없으니 \"쉽게 말하면 / 예를 들면\" 비유를 쓰지 말고 쉬운 말로만 설명]\n\n")
     figs = figure_list(pdf, AUDIO_DIR / f"{slug}-shorts" / "crops")
     fig_info = ("[사용 가능한 Figure/Table — visual_ref 는 이 목록에 있는 것만. 없는 번호는 화면에 못 나옴]\n"
                 + "\n".join(f"{ref}: {cap}" for ref, cap in figs) + "\n\n") if figs else ""
@@ -735,6 +736,16 @@ def illust_pool(paper) -> list[dict]:
     return pool[:40]  # analogy pictures are appended after these
 
 
+ANALOGY_MIN = 7  # analogy.md self-score (0~10); below this the video explains without analogies
+
+
+def _num(x) -> float:
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def design_analogies(paper, pool: list[dict]) -> list[dict]:
     """Before the script: the stronger (polish) model works out 3~4 analogies for the paper's core
     mechanisms (templates/shortform/analogy.md): several candidates each, a part-by-part mapping, where
@@ -747,7 +758,11 @@ def design_analogies(paper, pool: list[dict]) -> list[dict]:
         log.warning("비유 설계 실패, 비유 없이 대본 작성: %s", e)
         return []
     seen = {p["url"] for p in pool}
-    analogies = [a for a in out["analogies"] if a.get("concept") and a.get("analogy")][:4]
+    for a in out["analogies"]:
+        if _num(a.get("score")) < ANALOGY_MIN:
+            log.info("비유 버림 (%s점): %s → %s", a.get("score"), a.get("concept"), a.get("analogy"))
+    analogies = [a for a in out["analogies"]
+                 if a.get("concept") and a.get("analogy") and _num(a.get("score")) >= ANALOGY_MIN][:4]
     for a in analogies:
         a["candidates"] = []
         for q in [str(q) for q in a.get("search") or []][:3]:
