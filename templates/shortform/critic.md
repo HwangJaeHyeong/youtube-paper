@@ -29,6 +29,7 @@
 9-3. sfx: 효과음이 화면이 바뀌는 줄·컷에만 있는가 (화면이 그대로인 줄에 있으면 감점)? 결과 수치=positive, "근데 진짜 문제는"=negative 가 모두 있는가(하나라도 없으면 0점)? 첫 줄(훅)에 효과음이 있으면 0점. 효과음이 8~12번, 내용과 맞는 감정(좋은 결과=positive, 문제=negative, 황당=weird, 훅·반전=surprise, 큰 장면 전환=transition)인가? 마무리 줄에는 결론 감정(positive/negative) 효과음이 있어야 한다. 같은 종류가 연달아 세 번이면 감점.
 10. ending: 마지막 줄이 "이처럼 ~" 한 줄 결론으로 끝나는가? "좋아요·구독·유익했다면" 같은 인사가 있으면 0점 (엔딩 멘트는 코드가 붙임).
 12. easy_core: 논문 내용을 쉬운 핵심 2~3가지만 골랐는가? 세부 구조·실험 조건 나열, 영어 약어가 있으면 감점. 한 번 듣고 이해 안 되는 줄이 있으면 감점.
+13-1. no_repeat: 같은 내용·표현을 두 줄에서 되풀이하지 않는가? (훅↔다음 줄, 한계↔마무리 반복이 흔함) 있으면 0점.
 13. coherence: 이야기가 불편함 → 누가 만듦 → 방법 → 결과 → 문제 → 결론 한 줄기로 이어지는가? 앞에서 안 나온 걸 "그거"로 부르거나, 순서가 뒤섞이거나, 같은 대상을 다른 이름으로 부르면 0점.
 14. readability: 한 줄에 한 가지 내용, 주어·동사가 바로 들리는가? 정보를 욱여넣은 줄마다 감점.
 11. factuality: 논문 밖 검증 불가 수치/통계/개인사 없음? (지어낸 통계, 출처 없는 일화 등 있으면 0점)
@@ -46,9 +47,9 @@
 {
   "scores": {"title":n, "hook":n, "tone":n, "no_punct":n, "length":n, "flow":n, "structure":n, "daily_example":n, "analogy":n, "paper_intro":n, "twist":n, "flavor":n,
              "honesty":n, "plain_language":n, "figure_refs":n, "visual_mix":n, "repetition":n, "sfx":n, "ending":n, "factuality":n, "reactions":n, "paper_focus":n,
-             "easy_core":n, "coherence":n, "readability":n, "second_wave":n, "retention_loops":n, "single_insight":n,
+             "easy_core":n, "no_repeat":n, "coherence":n, "readability":n, "second_wave":n, "retention_loops":n, "single_insight":n,
              "density":n, "intuitive":n, "concreteness":n, "figure_match":n},
-  "total": 0~320,
+  "total": 0~330,
   "critical_issues": ["가장 아픈 문제 3개"],
   "specific_fixes": ["라인 X를 ~로 바꿔라 식의 구체 지시 5~10개"]
 }

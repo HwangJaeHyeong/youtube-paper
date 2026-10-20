@@ -336,21 +336,58 @@ def _process_inbox(items: list[Path], done: Path, out_dir: Path, venue: str, tem
             # YOUTUBE_UPLOAD=private|unlisted|public uploads as Shorts; empty = skip.
             # Marker file prevents re-uploading when the same PDF is processed again.
             uploaded = VIDEOS_DIR / f"{slug}-shorts.youtube"
+            write_description(folder, f"{slug}-shorts")
             if (privacy := os.getenv("YOUTUBE_UPLOAD", "")) and not uploaded.exists():
                 uploaded.write_text(upload(f"{slug}-shorts", privacy=privacy, shorts=True, channel="", publish_at=""))
+                folder = _file_uploaded(folder)
             elif uploaded.exists():
                 log.info("already uploaded: https://www.youtube.com/watch?v=%s (skip)", uploaded.read_text().strip())
-            write_description(folder, f"{slug}-shorts")
-            target = done / item.name
-            if target.exists():  # same name finished before: keep both
-                target = done / f"{name}-{datetime.now():%Y%m%d-%H%M%S}{item.suffix}"
+            day = done / f"{datetime.now():%Y-%m-%d}"  # input/finished/<day the video was made>/<item>
+            day.mkdir(parents=True, exist_ok=True)
+            target = day / item.name
+            if target.exists():  # same name finished that day: keep both
+                target = day / f"{name}-{datetime.now():%H%M%S}{item.suffix}"
             shutil.move(str(item), str(target))  # PDF or the whole input folder
             _cleanup(slug)
-            log.info("done: %s -> %s", item.name, out_dir / name)
+            log.info("done: %s -> %s", item.name, folder)
         except Exception:  # work files stay, so a retry reuses the script/audio
             failed += 1
             log.exception("failed: %s (left in %s)", item.name, item.parent)
     return failed
+
+
+def _file_uploaded(folder: Path) -> Path:
+    """output/<name>/ -> output/finished/<upload day>/<name>/ once the video is on YouTube."""
+    day = folder.parent / "finished" / f"{datetime.now():%Y-%m-%d}"
+    day.mkdir(parents=True, exist_ok=True)
+    target = day / folder.name
+    if target.exists():
+        target = day / f"{folder.name}-{datetime.now():%H%M%S}"
+    shutil.move(str(folder), str(target))
+    return target
+
+
+@app.command("upload-output")
+def upload_output(
+    name: str = typer.Argument(..., help="output/<name>/ 폴더 이름 (예: coffee)"),
+    privacy: str = typer.Option("private", help="private | unlisted | public"),
+    out_dir: Path = typer.Option(Path("output")),
+) -> None:
+    """숏폼 완성본 output/<name>/<name>.mp4 를 숏츠로 업로드하고 output/finished/<업로드 날짜>/<name>/ 로 옮김."""
+    folder = out_dir / name
+    scripts = [p for p in SCRIPTS_DIR.glob("sf-*-shorts.json")
+               if re.fullmatch(rf"sf-{re.escape(re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')[:40])}-[0-9a-f]{{6}}-shorts", p.stem)]
+    if len(scripts) != 1:
+        raise typer.BadParameter(f"{name}: 대본을 하나로 특정할 수 없음 {[p.name for p in scripts]}")
+    slug = scripts[0].stem
+    marker = VIDEOS_DIR / f"{slug}.youtube"
+    if marker.exists():
+        raise typer.BadParameter(f"{name}: 이미 업로드됨 https://www.youtube.com/watch?v={marker.read_text().strip()}")
+    title, description, tags = upload_meta(slug, shorts=True)
+    video_id = yt_upload.upload(folder / f"{name}.mp4", title, description, tags, privacy_status=privacy, is_shorts=True)
+    marker.write_text(video_id)
+    target = _file_uploaded(folder)
+    typer.echo(json.dumps({"url": f"https://www.youtube.com/shorts/{video_id}", "folder": str(target)}, ensure_ascii=False))
 
 
 def _cleanup(slug: str) -> None:
@@ -462,6 +499,7 @@ def upload_meta(slug: str, shorts: bool) -> tuple[str, str, list[str]]:
         lang = data.get("metadata", {}).get("lang", "ko")
         title_hook = data.get("title_hook", "") or ""
         primary_tag_raw = data.get("primary_tag", "") or ""
+        description_line = data.get("description_line", "") or ""
         content_type = data.get("metadata", {}).get("content_type", "")
         if not content_type:
             # Detect by heuristic: anime scripts carry image_prompt per line.
@@ -471,7 +509,7 @@ def upload_meta(slug: str, shorts: bool) -> tuple[str, str, list[str]]:
                 content_type = "paper"
     else:
         paper_title, verdict, official_url, lang = slug, "", "", "ko"
-        title_hook, primary_tag_raw, content_type = "", "", "paper"
+        title_hook, primary_tag_raw, content_type, description_line = "", "", "paper", ""
     import re as _re
     title = title_hook if title_hook else paper_title
     # title_hook is "Hook\n(**Lab** Paper)": YouTube titles are one line of plain text
@@ -516,13 +554,16 @@ def upload_meta(slug: str, shorts: bool) -> tuple[str, str, list[str]]:
         if shorts:
             hashtag_line += " #Shorts"
         official_line = f"📄 논문 원문: {official_url}\n\n" if official_url else ""
-        description = (
-            f"{paper_title}\n\n"
-            f"한줄평: {verdict}\n\n"
-            f"{official_line}"
-            f"{hashtag_line}\n\n"
-            ""
-        )
+        if description_line:  # shortform: "<sentence answering the title>" / "논문명 : <title>"
+            description = f"{description_line}\n\n논문명 : {paper_title}\n\n{official_line}{hashtag_line}\n\n"
+        else:
+            description = (
+                f"{paper_title}\n\n"
+                f"한줄평: {verdict}\n\n"
+                f"{official_line}"
+                f"{hashtag_line}\n\n"
+                ""
+            )
         tags = [
             "논문리뷰", "AI", "딥러닝", "머신러닝", "인공지능", "논문",
             "논문추천", "MachineLearning", "DeepLearning", "Research", "Paper",

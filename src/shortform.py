@@ -164,6 +164,56 @@ def sfx_events(lines: list[dict], tokens: list[dict], starts: list[float]) -> li
     return sorted(kept)
 
 
+def replace_missing_figures(lines: list[dict], available: set[str], has_demo: bool) -> None:
+    """A Figure/Table the writer named that can't be shown (not in the paper, or no clean crop) becomes
+    a demo moment (the matcher gives it an unused clip) or, without a demo, an illustration."""
+    for i, line in enumerate(lines):
+        for item in [line] + ((line.get("cuts") or []) if _cuts_allowed(i, line) else []):
+            ref = _ref(item.get("visual_ref"))
+            if ref and ref.startswith(("Figure", "Table")) and ref not in available:
+                new = "DEMO" if has_demo else "ILLUST"
+                log.info("L%d %s: 화면에 못 나옴 -> %s", i, ref, new)
+                for k in _SCREEN_KEYS:
+                    item.pop(k, None)
+                item["visual_ref"] = new
+
+
+def spoken_numbers(lines: list[dict]) -> bool:
+    """Captions keep digits ("17개"), the voice reads them the Korean way ("열일곱 개" / "십칠 퍼센트"):
+    lines with digits get a "tts" text (templates/shortform/tts_numbers.md). True if any line changed."""
+    todo = {f"L{i}": l for i, l in enumerate(lines) if re.search(r"\d", l["text"]) and "tts" not in l}
+    if not todo:
+        return False
+    try:
+        out = _ask_json("tts_numbers.md", "\n".join(f"{k}: {l['text']}" for k, l in todo.items()), "tts")["tts"]
+    except Exception as e:
+        log.warning("숫자 읽기 변환 실패, 숫자 그대로 읽음: %s", e)
+        return False
+    for k, line in todo.items():
+        spoken = strip_punct(str(out.get(k) or "")).strip()
+        if spoken and not re.search(r"\d", spoken):
+            line["tts"] = spoken
+            log.info("숫자 읽기 %s: %s -> %s", k, line["text"], spoken)
+    return True
+
+
+def add_description_line(data: dict) -> bool:
+    """The YouTube description's first line: one finished sentence answering the title, in 음슴체
+    (templates/shortform/description.md). True if added."""
+    if data.get("description_line"):
+        return False
+    script = "\n".join(l["text"] for l in data["script"] if l.get("visual_ref") != "OUTRO")
+    title = re.sub(r"\*\*", "", (data.get("title_hook") or "").split("\n")[0])
+    try:
+        line = _ask_json("description.md", f"[영상 제목]\n{title}\n\n[대본]\n{script}", "line")["line"]
+    except Exception as e:
+        log.warning("설명란 문장 생성 실패, 예전 형식(한줄평)으로: %s", e)
+        return False
+    data["description_line"] = " ".join(str(line).split()).rstrip(".")
+    log.info("설명란 문장: %s", data["description_line"])
+    return True
+
+
 def vary_screens(lines: list[dict], hold: int = 3) -> None:
     """Rules: no screen (Figure/Table crop, demo clip, picture) is shown twice, and one screen stays
     for at most `hold` script lines. A repeat, or the line after the hold runs out, becomes an
@@ -313,6 +363,15 @@ def script_issues(lines: list[dict]) -> list[str]:
         for c in line.get("cuts") or []:
             if str(c.get("at", "")) not in text.split():
                 issues.append(f"L{i}: cuts 의 at {c.get('at')!r} 가 text 에 띄어쓰기 단위로 없음")
+    # Rule: no line says again what another already said (e.g. the hook repeated as the next line).
+    from difflib import SequenceMatcher
+
+    for i, a in enumerate(lines):
+        for j in range(i + 1, len(lines)):
+            b = lines[j]
+            if SequenceMatcher(None, a["text"].replace(" ", ""), b["text"].replace(" ", "")).ratio() >= 0.55:
+                issues.append(f"L{i}·L{j}: 거의 같은 문장 ({a['text']} / {b['text']}). 같은 말 반복이면 한 줄을 새 내용으로 바꿀 것 "
+                              "(일부러 대비시킨 두 줄이면 그대로)")
     return issues
 
 
@@ -619,10 +678,12 @@ def _script(pdf: Path, slug: str, venue: str, catalog: list[dict]) -> dict:
     _review_script(data, paper)
     _validate(data)
     easy_illust(data["script"])
+    replace_missing_figures(data["script"], {ref for ref, _ in figs}, bool(catalog))
     _match_demo(data, paper, catalog)
     vary_screens(data["script"])
     use_pool(data["script"], pool)
-    _pick_illustrations(data, paper, AUDIO_DIR / f"{slug}-shorts")  # only for ILLUST moments still without a picture
+    dropped = drop_text_pictures(data, AUDIO_DIR / f"{slug}-shorts")
+    _pick_illustrations(data, paper, AUDIO_DIR / f"{slug}-shorts", avoid=dropped)  # ILLUST moments still without a picture
     cached.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return data
 
@@ -757,13 +818,37 @@ def _illust_sheets(items: list[tuple[str, str]], out_dir: Path, name: str) -> li
     return sheets
 
 
-def _pick_illustrations(data: dict, paper, work: Path) -> None:
+def drop_text_pictures(data: dict, work: Path) -> set[str]:
+    """Rule: no picture with Japanese writing in it (viewers can't read it). The writer picks pool
+    pictures by title only, so one look at them (templates/shortform/illust_text.md) finds the ones
+    with text; those moments lose their picture and go back to the picker. Returns the dropped URLs."""
+    chosen = [(k, item) for k, item, _ in moments(data["script"], "ILLUST") if item.get("illust_url")]
+    if not chosen:
+        return set()
+    sheets = _illust_sheets([(k, item["illust_url"]) for k, item in chosen], work / "illust", "text")
+    try:
+        found = set(_ask_json("illust_text.md", "[키 목록]\n" + "\n".join(k for k, _ in chosen), "has_text",
+                              images=sheets)["has_text"])
+    except Exception as e:
+        log.warning("일러스트 글자 검사 실패, 그대로 진행: %s", e)
+        return set()
+    dropped = set()
+    for k, item in chosen:
+        if k in found:
+            dropped.add(item.pop("illust_url"))
+            item.pop("illust", None)
+            item.pop("illust_mood", None)
+    log.info("일러스트 글자 검사: 일본어 글자 있음 %s -> 다시 고름", sorted(found))
+    return dropped
+
+
+def _pick_illustrations(data: dict, paper, work: Path, avoid: set[str] = frozenset()) -> None:
     """For every ILLUST moment still without a picture: the model writes Japanese search words
     (templates/shortform/illust_search.md; the last one is the line's subject, as a fallback), we search
     いらすとや, the model looks at the candidates on numbered sheets and picks one per moment
     (illust_pick.md). Pictures already in the video are not offered again."""
     found = [m for m in moments(data["script"], "ILLUST") if not m[1].get("illust_url")]
-    avoid = {m[1]["illust_url"] for m in moments(data["script"], "ILLUST") if m[1].get("illust_url")}
+    avoid = set(avoid) | {m[1]["illust_url"] for m in moments(data["script"], "ILLUST") if m[1].get("illust_url")}
     targets = {key: item for key, item, _ in found}
     spoken = {key: text for key, _, text in found}
     if not targets:
@@ -806,7 +891,14 @@ def _pick_illustrations(data: dict, paper, work: Path) -> None:
         return
     for key, line in targets.items():
         m = re.fullmatch(rf"{key}-(\d+)", str(picks.get(key) or ""))
-        if m and 1 <= int(m.group(1)) <= len(cands[key]) and _sized(cands[key][int(m.group(1)) - 1][0], "s800") not in avoid:
+        if not (m and 1 <= int(m.group(1)) <= len(cands[key]) and _sized(cands[key][int(m.group(1)) - 1][0], "s800") not in avoid):
+            # Rule: always show something. No pick -> the top search hit not used yet (the subject query
+            # guarantees a few), so the screen still changes.
+            n = next((n for n, (u, _) in enumerate(cands[key], 1) if _sized(u, "s800") not in avoid), None)
+            m = re.fullmatch(r"(\d+)", str(n)) if n else None
+            if m:
+                log.info("이라스토야 %s: 고른 그림 없음 -> 검색 1순위 후보 사용", key)
+        if m:
             url, title = cands[key][int(m.group(1)) - 1]
             avoid.add(_sized(url, "s800"))  # one picture, one moment
             line["illust_url"] = _sized(url, "s800")
@@ -841,7 +933,14 @@ def figure_list(pdf: Path, crops_dir: Path) -> list[tuple[str, str]]:
     crops_dir.mkdir(parents=True, exist_ok=True)
     out = []
     with fitz.open(pdf) as doc:
+        # Appendix figures (after the references) are never what a short shows, and some are huge
+        # vector plots that take minutes each to crop: skip them.
+        refs_page = next((i + 1 for i in range(len(doc) // 3, len(doc))
+                          if re.search(r"(?m)^\s*(References|REFERENCES|Bibliography)\s*$", doc[i].get_text())), len(doc))
         for ref, page in sorted(index.items(), key=lambda kv: (kv[0].split()[0], int(kv[0].split()[-1]))):
+            if page > refs_page:
+                log.info("%s: 부록(%d쪽)이라 제외", ref, page)
+                continue
             if not crop_figure(pdf, ref, page, crops_dir / f"{ref.replace(' ', '_')}.png"):
                 log.info("%s: 깔끔하게 잘리지 않아 제외", ref)
                 continue
@@ -907,8 +1006,14 @@ def build(pdf_in: Path, demo: Path | None, slug: str, venue: str = "") -> Path:
                       "emotion": "neutral", "pause_after_ms": 400})
     promote_first_cuts(lines)  # also fixes scripts saved before this rule
 
+    if spoken_numbers(lines) | add_description_line(data):  # saved: a rebuild reads/describes the same way
+        script_json = SCRIPTS_DIR / f"{shorts_slug}.json"
+        script_json.write_text(json.dumps({**data, "script": [l for l in lines if l.get("visual_ref") != "OUTRO"]},
+                                          ensure_ascii=False, indent=2), encoding="utf-8")
     log.info("3/4 숏폼 TTS %d lines", len(lines))
-    mp3, wavs, _ = _run_tts_and_merge(data, shorts_slug)
+    # The voice reads "tts" (numbers in Korean words) where present; captions below use "text".
+    mp3, wavs, _ = _run_tts_and_merge({**data, "script": [{**l, "text": l.get("tts") or l["text"]} for l in lines]},
+                                      shorts_slug)
     durs = [len(AudioSegment.from_file(wav)) / 1000 for wav in wavs]
     raw = sum(durs) + sum(int(l.get("pause_after_ms", 200)) / 1000 for l in lines)
     speed = max(float(voice.get("speed", 1.0)), raw / MAX_SECONDS)  # rule: the whole short stays under 60s
@@ -1129,6 +1234,10 @@ def _selftest() -> None:
           {"text": "마", "visual_ref": "Figure 2"}, {"text": "바 사", "visual_ref": "Figure 3",
                                                     "cuts": [{"at": "사", "visual_ref": "Figure 1"}]}]
     vary_screens(vs)
+    mf = [{"text": "가", "visual_ref": "Figure 9", "illust": 3}, {"text": "나 다", "visual_ref": "Figure 1",
+                                                                 "cuts": [{"at": "다", "visual_ref": "Table 2"}]}]
+    replace_missing_figures(mf, {"Figure 1"}, True)
+    assert mf[0] == {"text": "가", "visual_ref": "DEMO"} and mf[1]["cuts"][0]["visual_ref"] == "DEMO"
     assert [_ref(l.get("visual_ref")) for l in vs][4:6] == ["ILLUST", "Figure 2"]  # hold of 3 lines, then a picture
     assert vs[6]["cuts"][0]["visual_ref"] == "ILLUST"  # Figure 1 again -> picture instead
     cat = [{"id": 1, "start": 0, "end": 2, "wow": 1}, {"id": 2, "start": 2, "end": 4, "wow": 5},

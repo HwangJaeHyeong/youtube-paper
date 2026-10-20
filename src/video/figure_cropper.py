@@ -51,6 +51,10 @@ def _find_caption_rect(page: fitz.Page, ref: str) -> fitz.Rect | None:
 
     if not candidates:
         return None
+    # A real caption starts its own text block; body mentions ("... in Figure 2.") sit mid-paragraph.
+    starts = [c for c in candidates
+              if any(abs(b[0] - c.x0) < 3 and abs(b[1] - c.y0) < 3 for b in page.get_text("blocks"))]
+    candidates = starts or candidates
     if len(candidates) == 1:
         return candidates[0]
 
@@ -160,9 +164,13 @@ def _all_caption_rects(page: fitz.Page) -> list[fitz.Rect]:
     """
     rects: list[fitz.Rect] = []
     text = page.get_text()
+    blocks = page.get_text("blocks")
     for m in re.finditer(r"(?:Figure|Fig\.|Table|TABLE)\s*(?:\d+(?:\.\d+){0,2}|[IVXL]+)\s*[:.|]", text):
         for r in page.search_for(m.group()):
-            rects.append(r)
+            # only real captions (they start a text block); a body mention in the other column
+            # would otherwise cut the figure off as a "competing caption"
+            if any(abs(b[0] - r.x0) < 3 and abs(b[1] - r.y0) < 3 for b in blocks):
+                rects.append(r)
     return rects
 
 
