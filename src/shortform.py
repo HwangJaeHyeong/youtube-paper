@@ -123,7 +123,7 @@ def shot_list(lines: list[dict], tokens: list[dict], starts: list[float]) -> lis
 SFX_KINDS = ("positive", "negative", "weird", "surprise", "transition")
 SFX_GAP = 1.5  # seconds between two sound effects
 SFX_SNAP = 1.0  # a sound this close to a screen change moves onto it; farther ones are dropped
-MAX_SECONDS = 59.5  # hard cap incl. the ending line: longer narration is sped up (pitch kept)
+MAX_SECONDS = 38.0  # hard cap: longer narration is sped up (pitch kept)
 
 
 def sfx_events(lines: list[dict], tokens: list[dict], starts: list[float]) -> list[tuple[float, str]]:
@@ -170,7 +170,8 @@ def replace_missing_figures(lines: list[dict], available: set[str], has_demo: bo
     for i, line in enumerate(lines):
         for item in [line] + ((line.get("cuts") or []) if _cuts_allowed(i, line) else []):
             ref = _ref(item.get("visual_ref"))
-            if ref and ref.startswith(("Figure", "Table")) and ref not in available:
+            if ((ref and ref.startswith(("Figure", "Table")) and ref not in available)
+                    or (ref == "DEMO" and not has_demo)):  # no demo video: those moments get illustrations
                 new = "DEMO" if has_demo else "ILLUST"
                 log.info("L%d %s: 화면에 못 나옴 -> %s", i, ref, new)
                 for k in _SCREEN_KEYS:
@@ -341,7 +342,7 @@ def easy_illust(lines: list[dict]) -> None:
         cut["visual_ref"] = "ILLUST"
 
 
-TARGET_CHARS = (550, 600)  # ~10.5 chars/s spoken + the ~2.5s ending line = 56~59s (measured)
+TARGET_CHARS = (320, 360)  # ~10.5 chars/s spoken = 31~35s, no ending line (397 measured 40.6s with one)
 
 
 def script_issues(lines: list[dict]) -> list[str]:
@@ -350,10 +351,10 @@ def script_issues(lines: list[dict]) -> list[str]:
     total = sum(len(l["text"]) for l in lines)
     lo, hi = TARGET_CHARS
     if total < lo:
-        issues.append(f"전체 {total}자로 영상이 {total // 10}초뿐임. 56~59초가 되게 {lo - total}자 이상 늘릴 것 "
+        issues.append(f"전체 {total}자로 영상이 {total // 10}초뿐임. 31~35초가 되게 {lo - total}자 이상 늘릴 것 "
                       f"(방법·결과를 구체적으로, 줄을 추가해서. 한 줄은 {MAX_LINE}자 이하 유지)")
     elif total > hi + 15:
-        issues.append(f"전체 {total}자로 60초를 넘김. {total - hi}자 이상 줄일 것")
+        issues.append(f"전체 {total}자로 35초를 넘김. 방법·결과에서 {total - hi}자 이상 줄일 것")
     for i, line in enumerate(lines):
         text = line["text"]
         if len(text) > MAX_LINE:
@@ -650,7 +651,9 @@ def _script(pdf: Path, slug: str, venue: str, catalog: list[dict]) -> dict:
     paper = pdf_parser.parse(pdf)
     # The writer sees what the demo can actually show, so DEMO lands on lines it can illustrate.
     demo_info = (f"[데모 영상 장면 목록 — DEMO는 아래 장면으로 실제로 보여줄 수 있는 순간에만]\n{catalog_text(catalog)}\n\n"
-                 if catalog else "")
+                 if catalog else
+                 "[데모 영상 없음 — \"DEMO\"는 쓰지 말 것. 훅 줄은 제목 장면이 보이는 ILLUST, 데모로 보여줬을 순간은 "
+                 "그 줄의 주어·물건이 보이는 ILLUST 나 그 내용의 Figure/Table 로. 일러스트를 평소보다 많이 써서 화면이 자주 바뀌게]\n\n")
     # Pictures first, story second: the writer sees which いらすとや pictures exist and writes the
     # ILLUST lines around one of them ("illust": number), instead of us hunting for a match afterwards.
     pool = illust_pool(paper)
@@ -1210,7 +1213,7 @@ def _selftest() -> None:
     assert "illust_url" not in pool_lines[2]  # unknown number: left for the fallback picker
     got = script_issues([{"text": "가" * 41, "cuts": [{"at": "없음"}]}])
     assert got[0].startswith("전체 41자") and got[1].startswith("L0: 41자")
-    assert not any(i.startswith("전체") for i in script_issues([{"text": "가" * 30}] * 19))  # 570 chars: in range
+    assert not any(i.startswith("전체") for i in script_issues([{"text": "가" * 30}] * 11))  # 330 chars: in range
     fx = [{"text": "님들 혹시 이거 암?", "sfx": "surprise", "visual_ref": "DEMO"},
           {"text": "근데 새우는 망함", "sfx": "nope", "visual_ref": "Figure 1",
            "cuts": [{"at": "새우는", "sfx": "negative", "visual_ref": "DEMO"}]},
@@ -1253,6 +1256,9 @@ def _selftest() -> None:
                                                                  "cuts": [{"at": "다", "visual_ref": "Table 2"}]}]
     replace_missing_figures(mf, {"Figure 1"}, True)
     assert mf[0] == {"text": "가", "visual_ref": "DEMO"} and mf[1]["cuts"][0]["visual_ref"] == "DEMO"
+    nd = [{"text": "훅", "visual_ref": "DEMO", "demo_clip": 1}, {"text": "가", "visual_ref": "Figure 1"}]
+    replace_missing_figures(nd, {"Figure 1"}, False)  # no demo video: DEMO moments become pictures
+    assert nd[0] == {"text": "훅", "visual_ref": "ILLUST"} and nd[1]["visual_ref"] == "Figure 1"
     assert [_ref(l.get("visual_ref")) for l in vs][4:6] == ["ILLUST", "Figure 2"]  # hold of 3 lines, then a picture
     assert vs[6]["cuts"][0]["visual_ref"] == "ILLUST"  # Figure 1 again -> picture instead
     cat = [{"id": 1, "start": 0, "end": 2, "wow": 1}, {"id": 2, "start": 2, "end": 4, "wow": 5},

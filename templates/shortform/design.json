@@ -35,9 +35,5 @@
     "dir": "sfx"
   },
   "illust_zoom": 0.05,
-  "mix_db": -6,
-  "outro": {
-    "image": "outro.jpeg",
-    "text": "다음 논문은 댓글로 추천받는다"
-  }
+  "mix_db": -6
 }
